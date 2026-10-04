@@ -1,0 +1,66 @@
+{
+  "$schema": "https://axiom.cloud.google.com/schemas/skill.v1.json",
+  "skill_id": "sprint_timeline_skill",
+  "skill_name": "Sprint Timeline Skill",
+  "version": "1.0.0",
+  "target_masters": ["PM.ai"],
+  "applicable_capabilities": [
+    "sprint_timeline_analysis",
+    "sprint_replanning",
+    "pi_planning"
+  ],
+  "competence_summary": "Models sprint timelines, predicts critical path task delivery dates, evaluates scope adjustments, and forecasts schedule variance against milestone deadlines.",
+  "reasoning_heuristics": [
+    "Step 1: Retrieve sprint calendar, committed task estimates, and active sprint day from BigQuery.",
+    "Step 2: Calculate daily completion run rate against ideal linear burn line.",
+    "Step 3: Identify critical path dependencies that cannot be parallelized.",
+    "Step 4: Compute projected finish date using current velocity trend vs remaining story points.",
+    "Step 5: If projected date exceeds sprint cutoff, formulate scope-reduction or re-sequencing options ranked by milestone protection."
+  ],
+  "required_evidence_artifacts": [
+    {
+      "artifact_type": "sprint_schedule_calendar",
+      "source_system": "bigquery_analytics",
+      "mandatory_fields": ["sprint_id", "start_date", "end_date", "working_days_remaining"]
+    },
+    {
+      "artifact_type": "task_completion_distribution",
+      "source_system": "github_tracker",
+      "mandatory_fields": ["open_tasks", "in_progress_tasks", "closed_tasks", "remaining_story_points"]
+    }
+  ],
+  "candidate_agents": [
+    {
+      "agent_id": "resource_agent",
+      "delegation_goal": "Retrieve remaining task hours and developer velocity forecasts."
+    },
+    {
+      "agent_id": "requirement_agent",
+      "delegation_goal": "Check dependency ordering of remaining sprint user stories."
+    }
+  ],
+  "guardrails": {
+    "input_guardrails": [
+      "Sprint start and end dates must be strictly defined.",
+      "Must account for non-working calendar days (weekends, statutory holidays)."
+    ],
+    "safety_guardrails": [
+      "PM.ai must NOT truncate testing or QA phases to make schedule fit.",
+      "PM.ai must report realistic delivery dates rather than optimistic projections."
+    ]
+  },
+  "evaluation_criteria": {
+    "minimum_evidence_count": 2,
+    "pass_conditions": [
+      "Projected finish date computed with confidence range.",
+      "Critical path tasks identified with dependency links.",
+      "Actionable replanning proposal presented if schedule variance is negative."
+    ]
+  },
+  "visual_first_specification": {
+    "requires_visual": true,
+    "visual_format": "sprint_timeline_gantt",
+    "visual_generation_prompt": "A modern software development Gantt chart showing current sprint timeline. Critical path tasks are rendered in vibrant orange, completed tasks in emerald green, and a vertical dashed marker indicates Today's date with a red forecasted slip line extending 3 days past the sprint boundary.",
+    "fallback_mermaid": "gantt\n  title Sprint 4 Delivery Timeline\n  dateFormat  YYYY-MM-DD\n  section Critical Path\n  Proximity Fix       :crit, active, 2026-10-05, 3d\n  Regression Tests    :crit, after a1, 2d\n  Milestone Alpha Signoff :milestone, 2026-10-10, 0d"
+  }
+}

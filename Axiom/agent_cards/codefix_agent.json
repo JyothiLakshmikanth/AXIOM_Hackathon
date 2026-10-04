@@ -1,0 +1,106 @@
+{
+  "$schema": "https://axiom.cloud.google.com/schemas/agent-card.v1.json",
+  "agent_id": "codefix_agent",
+  "name": "Code Analysis & Surgical Fix Specialist Agent",
+  "version": "1.0.0",
+  "framework": "LangChain ReAct Agent",
+  "role_description": "Specialized agent dedicated to code-level AST inspection, git commit diff analysis, regression isolation, and surgical patch generation for ENG.ai Master.",
+  "primary_knowledge_source": {
+    "system": "Synthetic Git & Cloud Storage Source Trees",
+    "branches": ["main", "regression_baseline", "fix/*"]
+  },
+  "secondary_knowledge_source": {
+    "system": "BigQuery Commit & PR Metadata",
+    "tables": ["commits", "pull_requests", "code_artifacts"]
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["inspect_ast", "get_commit_diff", "isolate_regression", "generate_patch", "validate_syntax"],
+        "description": "Code engineering task."
+      },
+      "file_path": {
+        "type": "string",
+        "description": "Relative repository path (e.g. proximity_controller.py)."
+      },
+      "target_commit": {
+        "type": "string",
+        "description": "Commit SHA or branch name."
+      },
+      "root_cause_context": {
+        "type": "string",
+        "description": "Isolated causal condition (e.g. missing hysteresis on single threshold distance <= 2.0m)."
+      }
+    },
+    "required": ["action", "file_path"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "agent_id": {"type": "string"},
+      "execution_status": {"type": "string", "enum": ["SUCCESS", "PARTIAL", "FAILED"]},
+      "ast_analysis": {"type": "object"},
+      "regression_commit": {
+        "type": "object",
+        "properties": {
+          "commit_sha": {"type": "string"},
+          "author": {"type": "string"},
+          "summary": {"type": "string"}
+        }
+      },
+      "proposed_patch": {
+        "type": "object",
+        "properties": {
+          "patch_diff": {"type": "string"},
+          "target_branch": {"type": "string"},
+          "target_file": {"type": "string"},
+          "syntax_valid": {"type": "boolean"}
+        }
+      },
+      "evidences": {"type": "array"}
+    },
+    "required": ["agent_id", "execution_status", "evidences"]
+  },
+  "capabilities": [
+    "Parse and inspect Python AST syntax trees for boundary logic errors",
+    "Analyze git log history to isolate regression-introducing commits",
+    "Synthesize deterministic surgical patches (e.g. hysteresis band & state debounce)",
+    "Validate patch syntax and formatting prior to handoff",
+    "Prepare PR metadata linked to GitHub issue and requirement"
+  ],
+  "can_do": [
+    "Read repository source files and commit histories",
+    "Execute Python AST parser to locate conditional statements",
+    "Generate unified diff patches with line context",
+    "Produce verifiable EvidenceEnvelopes"
+  ],
+  "cannot_do": [
+    "Cannot commit directly to the main branch",
+    "Cannot merge pull requests without human engineer sign-off",
+    "Cannot alter project schedules or reassign developers"
+  ],
+  "tools": [
+    {
+      "name": "git_get_commit_diff",
+      "description": "Inspects commit diffs between baseline and regression points."
+    },
+    {
+      "name": "git_inspect_source_file",
+      "description": "Retrieves source code for target file at specific revision."
+    },
+    {
+      "name": "ast_analyze_code_structure",
+      "description": "Parses Python AST to locate specific function, condition, and threshold logic."
+    },
+    {
+      "name": "generate_surgical_patch",
+      "description": "Synthesizes minimal unified diff addressing the verified root cause."
+    },
+    {
+      "name": "validate_patch_syntax",
+      "description": "Compiles patched code to verify zero syntax errors and valid AST."
+    }
+  ]
+}

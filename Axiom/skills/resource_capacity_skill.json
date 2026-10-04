@@ -1,0 +1,62 @@
+{
+  "$schema": "https://axiom.cloud.google.com/schemas/skill.v1.json",
+  "skill_id": "resource_capacity_skill",
+  "skill_name": "Resource Capacity Skill",
+  "version": "1.0.0",
+  "target_masters": ["PM.ai"],
+  "applicable_capabilities": [
+    "sprint_replanning",
+    "project_health",
+    "pi_planning"
+  ],
+  "competence_summary": "Assesses team member availability, skills matrix affinities, vacation schedules, and workload utilization to balance tasks across sprints and PI increments without burnout.",
+  "reasoning_heuristics": [
+    "Step 1: Retrieve engineer allocation roster and planned hours from BigQuery resources table.",
+    "Step 2: Query Qdrant for semantic match between task technical requirements and engineer competencies.",
+    "Step 3: Factor in planned leaves, holidays, and on-call rotations to compute net available capacity.",
+    "Step 4: Flag any engineer allocated beyond the 85% safety threshold.",
+    "Step 5: Formulate workload rebalancing recommendations (e.g. shift non-critical tasks to subsequent sprints or peer developers)."
+  ],
+  "required_evidence_artifacts": [
+    {
+      "artifact_type": "engineer_capacity_envelope",
+      "source_system": "bigquery_resources",
+      "mandatory_fields": ["engineer_id", "name", "total_hours_available", "allocated_hours", "utilization_pct"]
+    },
+    {
+      "artifact_type": "domain_competency_vector",
+      "source_system": "qdrant_team_manifest",
+      "mandatory_fields": ["engineer_id", "primary_skills", "domain_experience_years"]
+    }
+  ],
+  "candidate_agents": [
+    {
+      "agent_id": "resource_agent",
+      "delegation_goal": "Retrieve developer capacity envelopes, competencies, and current assignments."
+    }
+  ],
+  "guardrails": {
+    "input_guardrails": [
+      "Sprint or PI timeframe must be specified.",
+      "Valid engineer or squad identifier required."
+    ],
+    "safety_guardrails": [
+      "PM.ai must NOT reassign engineers without validating requisite technical competency.",
+      "PM.ai must respect maximum 40h/week baseline without explicit executive overtime authorization."
+    ]
+  },
+  "evaluation_criteria": {
+    "minimum_evidence_count": 2,
+    "pass_conditions": [
+      "Capacity envelope calculated per team member.",
+      "Overallocation flags triggered for utilization > 85%.",
+      "Rebalancing plan proposed with zero unassigned high-priority tasks."
+    ]
+  },
+  "visual_first_specification": {
+    "requires_visual": true,
+    "visual_format": "capacity_utilization_barchart",
+    "visual_generation_prompt": "A modern clean corporate capacity chart showing individual team members along the X-axis and weekly hours on Y-axis. Over-allocated members are highlighted in vivid red with an 85% horizontal dotted threshold line.",
+    "fallback_mermaid": "graph LR\n  E1[Dev Alpha: 95% - Overallocated] --> REBALANCE[Rebalance to Dev Beta]\n  E2[Dev Beta: 65% - Available]\n  style E1 fill:#ffcccc,stroke:#cc0000,stroke-width:2px\n  style E2 fill:#ccffcc,stroke:#00aa00,stroke-width:2px"
+  }
+}

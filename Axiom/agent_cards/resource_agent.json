@@ -1,0 +1,89 @@
+{
+  "$schema": "https://axiom.cloud.google.com/schemas/agent-card.v1.json",
+  "agent_id": "resource_agent",
+  "name": "Resource & Capacity Intelligence Specialist Agent",
+  "version": "1.0.0",
+  "framework": "LangChain ReAct Agent",
+  "role_description": "Specialized agent dedicated to engineer capacity modeling, team velocity tracking, sprint allocation balancing, and team skills retrieval using Qdrant vector search and BigQuery project data.",
+  "primary_knowledge_source": {
+    "system": "Qdrant Vector DB",
+    "collections": ["team_competencies", "project_manifest", "pi_planning_docs"]
+  },
+  "secondary_knowledge_source": {
+    "system": "BigQuery Resource Datasets",
+    "tables": ["resources", "resource_allocations", "sprints", "milestones"]
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["get_velocity_history", "analyze_team_capacity", "rebalance_sprint", "search_skills"],
+        "description": "Resource or capacity operation."
+      },
+      "sprint_id": {
+        "type": "string",
+        "description": "Target sprint (e.g. SPRINT-04)."
+      },
+      "required_skills": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Skills needed for task matching (e.g. ['python', 'firmware', 'ble'])."
+      }
+    },
+    "required": ["action"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "agent_id": {"type": "string"},
+      "execution_status": {"type": "string", "enum": ["SUCCESS", "PARTIAL", "FAILED"]},
+      "velocity_summary": {
+        "type": "object",
+        "properties": {
+          "rolling_average_velocity": {"type": "number"},
+          "volatility_index": {"type": "number"},
+          "current_sprint_committed": {"type": "number"}
+        }
+      },
+      "capacity_envelope": {"type": "array"},
+      "rebalance_recommendations": {"type": "array"},
+      "evidences": {"type": "array"}
+    },
+    "required": ["agent_id", "execution_status", "evidences"]
+  },
+  "capabilities": [
+    "Compute historical rolling average velocity and velocity volatility",
+    "Model engineer hours, vacation schedules, and utilization rates",
+    "Match tasks to engineers using semantic skill embeddings in Qdrant",
+    "Formulate sprint replanning adjustments to mitigate delivery slips"
+  ],
+  "can_do": [
+    "Query BigQuery for sprint commitment and completion statistics",
+    "Search Qdrant for engineer bios, certifications, and technical domains",
+    "Generate mathematical capacity projections and workload rebalancing options"
+  ],
+  "cannot_do": [
+    "Cannot commit sprint changes without PM approval",
+    "Cannot approve overtime pay or alter contractual working hours",
+    "Cannot inspect code or run unit tests"
+  ],
+  "tools": [
+    {
+      "name": "bigquery_get_team_velocity_history",
+      "description": "Calculates story points committed vs delivered across past sprints."
+    },
+    {
+      "name": "bigquery_get_sprint_allocations",
+      "description": "Retrieves planned engineer assignments, story points, and hours."
+    },
+    {
+      "name": "qdrant_search_team_skills_and_manifest",
+      "description": "Performs dense semantic vector search for team competencies in Qdrant."
+    },
+    {
+      "name": "compute_rebalanced_sprint_capacity",
+      "description": "Runs optimization heuristic to redistribute unassigned tasks without exceeding 85% utilization."
+    }
+  ]
+}

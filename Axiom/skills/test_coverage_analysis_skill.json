@@ -1,0 +1,67 @@
+{
+  "$schema": "https://axiom.cloud.google.com/schemas/skill.v1.json",
+  "skill_id": "test_coverage_analysis_skill",
+  "skill_name": "Test Coverage Analysis Skill",
+  "version": "1.0.0",
+  "target_masters": ["PM.ai", "ENG.ai"],
+  "applicable_capabilities": [
+    "test_case_generation",
+    "increasing_test_coverage",
+    "project_health",
+    "eight_d_analysis"
+  ],
+  "competence_summary": "Analyzes test coverage matrices, pinpoints unexercised boundary conditions and untested requirement branches, and designs targeted regression test suites.",
+  "reasoning_heuristics": [
+    "Step 1: Retrieve test execution results and branch coverage statistics from BigQuery QA dataset.",
+    "Step 2: Cross-reference tests against requirement nodes in Neo4j Knowledge Graph to calculate requirement verification percentage.",
+    "Step 3: Identify untested edge-case scenarios (e.g. signal noise, boundary jitter, timeout handling).",
+    "Step 4: Delegate to test_agent to synthesize pytest test cases covering the missing boundaries.",
+    "Step 5: Verify that synthesized tests catch the regression without breaking existing valid unit tests."
+  ],
+  "required_evidence_artifacts": [
+    {
+      "artifact_type": "requirement_test_matrix",
+      "source_system": "neo4j_kg",
+      "mandatory_fields": ["requirement_id", "total_linked_tests", "passing_tests", "uncovered_clauses"]
+    },
+    {
+      "artifact_type": "branch_coverage_report",
+      "source_system": "synthetic_qa",
+      "mandatory_fields": ["module_name", "branch_coverage_percent", "uncovered_branches"]
+    }
+  ],
+  "candidate_agents": [
+    {
+      "agent_id": "test_agent",
+      "delegation_goal": "Retrieve branch coverage reports and synthesize targeted unit tests."
+    },
+    {
+      "agent_id": "requirement_agent",
+      "delegation_goal": "Query Neo4j for requirement acceptance criteria mapping to test cases."
+    }
+  ],
+  "guardrails": {
+    "input_guardrails": [
+      "Target module or requirement identifier must be specified.",
+      "Coverage analysis must be performed on active baseline commit."
+    ],
+    "safety_guardrails": [
+      "Generated test cases must not alter production logic.",
+      "Assertions must be deterministic and not introduce test flakiness."
+    ]
+  },
+  "evaluation_criteria": {
+    "minimum_evidence_count": 2,
+    "pass_conditions": [
+      "Requirement-to-test coverage gap explicitly quantified.",
+      "Untested boundary condition isolated (e.g. proximity distance between 1.95m and 2.05m).",
+      "Candidate test cases drafted with deterministic inputs and assertions."
+    ]
+  },
+  "visual_first_specification": {
+    "requires_visual": true,
+    "visual_format": "test_coverage_heatmap",
+    "visual_generation_prompt": "A modern software quality heatmap grid displaying requirement categories on Y-axis and testing phases (Unit, Integration, HIL, Field) on X-axis. REQ-004 boundary test cell is highlighted in bold amber warning color showing 0% coverage before fix.",
+    "fallback_mermaid": "pie title Test Coverage for REQ-004\n  \"Covered Nominal Paths\" : 65\n  \"Missing Boundary Edge Cases\" : 25\n  \"Untested Error Recovery\" : 10"
+  }
+}

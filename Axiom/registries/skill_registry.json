@@ -1,0 +1,236 @@
+{
+  "$schema": "https://axiom.cloud.google.com/schemas/skill-registry.v1.json",
+  "version": "1.0.0",
+  "system": "AXIOM Multi-Agent Intelligence System",
+  "description": "Registry of cognitive skills (competencies, rules, and evidence criteria) available for PM.ai and ENG.ai Masters during reasoning and planning.",
+  "skills": {
+    "velocity_analysis_skill": {
+      "skill_id": "velocity_analysis_skill",
+      "skill_name": "Velocity Analysis Skill",
+      "file_path": "skills/velocity_analysis_skill.json",
+      "applicable_masters": ["PM.ai"],
+      "competence": "Computes historical and current sprint completion rates, volatility metrics, commitment-vs-delivered ratios, and predicts trajectory risks for ongoing sprints.",
+      "required_evidence_artifacts": [
+        "sprint_velocity_record",
+        "story_point_burn_rate",
+        "historical_sprint_aggregates"
+      ],
+      "candidate_agents": ["resource_agent", "defect_agent"],
+      "evaluation_criteria": [
+        "Minimum 3 historical sprints analyzed for rolling average",
+        "Volatility standard deviation computed",
+        "Variance between committed and completed story points identified"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "burndown_and_velocity_trend",
+        "description": "Generates a dual-axis burndown chart displaying committed points vs completed points across sprints with trend forecasting."
+      }
+    },
+    "defect_correlation_skill": {
+      "skill_id": "defect_correlation_skill",
+      "skill_name": "Defect Correlation Skill",
+      "file_path": "skills/defect_correlation_skill.json",
+      "applicable_masters": ["PM.ai", "ENG.ai"],
+      "competence": "Correlates reported defects with system requirements, impacted test cases, historical bug trends, and delivery milestones to determine severity, urgency, and probable leakage direction.",
+      "required_evidence_artifacts": [
+        "github_issue_record",
+        "requirement_traceability_link",
+        "test_run_failure_log",
+        "component_defect_density"
+      ],
+      "candidate_agents": ["defect_agent", "requirement_agent", "test_agent"],
+      "evaluation_criteria": [
+        "Defect severity and reproduction state verified",
+        "At least one requirement node linked in the graph",
+        "Probable leakage direction classified (Requirements, Design, Code, or Test)"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "defect_leakage_flow",
+        "description": "Visual diagram showing defect origin, propagation through development phases, and milestone blast radius."
+      }
+    },
+    "root_cause_discovery_skill": {
+      "skill_id": "root_cause_discovery_skill",
+      "skill_name": "Root Cause Discovery Skill",
+      "file_path": "skills/root_cause_discovery_skill.json",
+      "applicable_masters": ["ENG.ai"],
+      "competence": "Pinpoints deterministic code-level root cause by analyzing AST syntax, git commit diffs, regression points, and runtime execution traces under failing test conditions.",
+      "required_evidence_artifacts": [
+        "git_commit_diff",
+        "source_ast_inspection",
+        "failing_test_stacktrace",
+        "code_traceability_edge"
+      ],
+      "candidate_agents": ["codefix_agent", "test_agent", "requirement_agent"],
+      "evaluation_criteria": [
+        "Regression-introducing commit identified with hash and author",
+        "Exact file, function, and line-level boundary condition isolated",
+        "Deterministic reproduction validated with failing test execution"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "causal_flow_ast_diff",
+        "description": "Annotated code diff highlighting unstable logic boundary alongside call stack sequence."
+      }
+    },
+    "test_coverage_analysis_skill": {
+      "skill_id": "test_coverage_analysis_skill",
+      "skill_name": "Test Coverage Analysis Skill",
+      "file_path": "skills/test_coverage_analysis_skill.json",
+      "applicable_masters": ["PM.ai", "ENG.ai"],
+      "competence": "Measures requirement-to-test traceability gaps, edge-case test omissions, branch coverage deficits, and identifies missing regression tests for boundary conditions.",
+      "required_evidence_artifacts": [
+        "requirement_test_matrix",
+        "branch_coverage_report",
+        "untested_boundary_condition"
+      ],
+      "candidate_agents": ["test_agent", "requirement_agent"],
+      "evaluation_criteria": [
+        "Requirement coverage percentage calculated against active backlog",
+        "Missing test cases for critical thresholds documented",
+        "Specific test case IDs mapped to failing assertion conditions"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "test_coverage_heatmap",
+        "description": "Requirement-to-test coverage heatmap showing green/red test verification density across modules."
+      }
+    },
+    "code_quality_vulnerability_skill": {
+      "skill_id": "code_quality_vulnerability_skill",
+      "skill_name": "Code Quality & Vulnerability Skill",
+      "file_path": "skills/code_quality_vulnerability_skill.json",
+      "applicable_masters": ["ENG.ai"],
+      "competence": "Analyzes source code for architectural anti-patterns, complexity hotspots, boundary instability (e.g., hysteresis omission), security flaws, and compliance standards.",
+      "required_evidence_artifacts": [
+        "code_smell_report",
+        "cyclomatic_complexity_score",
+        "security_linter_findings",
+        "proposed_patch_syntax_tree"
+      ],
+      "candidate_agents": ["codefix_agent"],
+      "evaluation_criteria": [
+        "Syntactic validity of candidate patch verified",
+        "Complexity metrics remain within thresholds post-patch",
+        "Zero new security vulnerabilities introduced"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "patch_safety_radar",
+        "description": "Radar chart comparing before/after cyclomatic complexity, test coverage, and security score."
+      }
+    },
+    "resource_capacity_skill": {
+      "skill_id": "resource_capacity_skill",
+      "skill_name": "Resource Capacity Skill",
+      "file_path": "skills/resource_capacity_skill.json",
+      "applicable_masters": ["PM.ai"],
+      "competence": "Evaluates engineer utilization, team skill affinities, vacation/calendar constraints, and workload imbalances to produce feasible sprint and PI allocations.",
+      "required_evidence_artifacts": [
+        "engineer_capacity_envelope",
+        "domain_competency_vector",
+        "current_sprint_workload_hours"
+      ],
+      "candidate_agents": ["resource_agent"],
+      "evaluation_criteria": [
+        "Individual engineer allocation not exceeding 85% planned capacity",
+        "Competency match verified for assigned technical tasks",
+        "Absence/leave calendars factored into available hours"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "capacity_utilization_barchart",
+        "description": "Stacked bar chart showing engineer capacity vs committed story hours across sprints."
+      }
+    },
+    "dependency_risk_skill": {
+      "skill_id": "dependency_risk_skill",
+      "skill_name": "Dependency Risk Skill",
+      "file_path": "skills/dependency_risk_skill.json",
+      "applicable_masters": ["PM.ai", "ENG.ai"],
+      "competence": "Traverses the Neo4j Knowledge Graph to calculate ripple effects, upstream blocking requirements, downstream architectural dependencies, and delivery milestone blast radius.",
+      "required_evidence_artifacts": [
+        "neo4j_subgraph_edges",
+        "upstream_blocking_nodes",
+        "milestone_impact_vector"
+      ],
+      "candidate_agents": ["requirement_agent", "defect_agent"],
+      "evaluation_criteria": [
+        "Transitive closure of impacted dependencies calculated up to depth 3",
+        "Critical path milestones identified and flagged if threatened",
+        "Cross-component ripple blast radius scored (Low/Medium/High/Critical)"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "dependency_ripple_network",
+        "description": "Force-directed dependency network showing defect/requirement node and affected ripple nodes."
+      }
+    },
+    "sprint_timeline_skill": {
+      "skill_id": "sprint_timeline_skill",
+      "skill_name": "Sprint Timeline Skill",
+      "file_path": "skills/sprint_timeline_skill.json",
+      "applicable_masters": ["PM.ai"],
+      "competence": "Forecasts sprint completion schedules, models critical path timelines, simulates scope adjustments, and calculates schedule variance under varying velocity conditions.",
+      "required_evidence_artifacts": [
+        "sprint_schedule_calendar",
+        "task_completion_distribution",
+        "monte_carlo_completion_probabilities"
+      ],
+      "candidate_agents": ["resource_agent", "requirement_agent"],
+      "evaluation_criteria": [
+        "Projected completion date computed with 80% confidence interval",
+        "Critical path variance measured in business days",
+        "Scope reduction trade-offs ranked by milestone preservation impact"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "sprint_timeline_gantt",
+        "description": "Visual Gantt timeline highlighting critical path tasks, float time, and milestone delivery date."
+      }
+    },
+    "eight_d_problem_solving_skill": {
+      "skill_id": "eight_d_problem_solving_skill",
+      "skill_name": "8D Problem Solving Skill",
+      "file_path": "skills/eight_d_problem_solving_skill.json",
+      "applicable_masters": ["ENG.ai"],
+      "competence": "Executes the rigorous Eight Disciplines (8D) methodology to systematically isolate root causes, deploy containment actions, prove permanent corrective actions (PCA), and prevent systemic recurrence.",
+      "required_evidence_artifacts": [
+        "d2_problem_description_envelope",
+        "d3_containment_action_proof",
+        "d4_root_cause_evidence",
+        "d5_chosen_permanent_corrective_action",
+        "d6_validation_test_run",
+        "d7_prevention_guideline"
+      ],
+      "candidate_agents": ["codefix_agent", "defect_agent", "test_agent"],
+      "evaluation_criteria": [
+        "All 8 discipline sections completed with verifiable evidence envelopes",
+        "Direct link established between D4 root cause and D5 corrective patch",
+        "Passing regression test proving D6 verification before resolution"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "eight_d_ishikawa_dossier",
+        "description": "Ishikawa Fishbone root cause diagram with D1-D8 status badges."
+      }
+    },
+    "five_why_analysis_skill": {
+      "skill_id": "five_why_analysis_skill",
+      "skill_name": "5 Why Analysis Skill",
+      "file_path": "skills/five_why_analysis_skill.json",
+      "applicable_masters": ["ENG.ai"],
+      "competence": "Executes recursive 5-Why causal questioning drilldown, verifying each causal link with code, test, or process evidence to expose foundational systemic breakdowns.",
+      "required_evidence_artifacts": [
+        "why_layer_1_manifestation",
+        "why_layer_2_code_condition",
+        "why_layer_3_design_omission",
+        "why_layer_4_test_gap",
+        "why_layer_5_governance_breakdown"
+      ],
+      "candidate_agents": ["codefix_agent", "defect_agent", "test_agent"],
+      "evaluation_criteria": [
+        "Each 'Why' transition supported by at least one verifiable evidence envelope",
+        "Transition from immediate technical symptom to underlying systemic root cause verified",
+        "Countermeasure proposed for Why-4 and Why-5"
+      ],
+      "visual_trigger": {
+        "preferred_chart": "five_why_ladder_diagram",
+        "description": "Stepped ladder causal diagram mapping Why 1 through 5 with linked evidence citations."
+      }
+    }
+  }
+}
