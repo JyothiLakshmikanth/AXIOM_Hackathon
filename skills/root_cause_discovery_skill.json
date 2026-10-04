@@ -1,0 +1,73 @@
+{
+  "$schema": "https://axiom.cloud.google.com/schemas/skill.v1.json",
+  "skill_id": "root_cause_discovery_skill",
+  "skill_name": "Root Cause Discovery Skill",
+  "version": "1.0.0",
+  "target_masters": ["ENG.ai"],
+  "applicable_capabilities": [
+    "root_cause_analysis",
+    "eight_d_analysis",
+    "five_why_analysis",
+    "code_fixing"
+  ],
+  "competence_summary": "Discovers deterministic code-level root causes by inspecting AST syntax, git commit diffs, regression points, and runtime execution logs under failing test conditions.",
+  "reasoning_heuristics": [
+    "Step 1: Ingest approved engineering mission from PM.ai or direct user request.",
+    "Step 2: Delegate to codefix_agent to retrieve git commit history and recent diffs affecting target component (e.g. proximity_controller.py).",
+    "Step 3: Analyze AST structure around boundary thresholds (e.g. strict single threshold 'if distance <= 2.0' causing hunting/oscillation without hysteresis band).",
+    "Step 4: Delegate to test_agent to run or inspect reproduction test (e.g. tests/test_proximity_controller.py) across oscillating inputs (e.g. 1.99m, 2.01m, 1.98m).",
+    "Step 5: Confirm deterministic root cause: missing hysteresis buffer and debounce state machine in proximity evaluation.",
+    "Step 6: Formulate technical RCA statement with commit hash, line numbers, and causal explanation."
+  ],
+  "required_evidence_artifacts": [
+    {
+      "artifact_type": "git_commit_diff",
+      "source_system": "synthetic_git",
+      "mandatory_fields": ["commit_sha", "author", "changed_files", "diff_content"]
+    },
+    {
+      "artifact_type": "source_ast_inspection",
+      "source_system": "cloud_storage_src",
+      "mandatory_fields": ["file_path", "function_name", "ast_node_type", "line_start", "line_end"]
+    },
+    {
+      "artifact_type": "failing_test_stacktrace",
+      "source_system": "synthetic_qa",
+      "mandatory_fields": ["test_file", "failing_line", "assertion_error", "reproduction_input"]
+    }
+  ],
+  "candidate_agents": [
+    {
+      "agent_id": "codefix_agent",
+      "delegation_goal": "Perform AST inspection and retrieve regression commit diffs."
+    },
+    {
+      "agent_id": "test_agent",
+      "delegation_goal": "Execute boundary oscillation reproduction tests and capture stack traces."
+    }
+  ],
+  "guardrails": {
+    "input_guardrails": [
+      "Must have confirmed defect ticket or reproduction script before code root cause is declared.",
+      "Must isolate specific source file and function name."
+    ],
+    "safety_guardrails": [
+      "ENG.ai must NOT present speculative hypotheses as confirmed root cause without reproduction test evidence.",
+      "ENG.ai must NOT execute destructive git operations on main branch."
+    ]
+  },
+  "evaluation_criteria": {
+    "minimum_evidence_count": 3,
+    "pass_conditions": [
+      "Regression-introducing commit identified with SHA and timestamp.",
+      "Exact unstable conditional statement identified with line numbers.",
+      "Reproducible failing test trace provided demonstrating bug occurrence."
+    ]
+  },
+  "visual_first_specification": {
+    "requires_visual": true,
+    "visual_format": "causal_flow_ast_diff",
+    "visual_generation_prompt": "A modern, sleek dark-mode UI split view showing code AST syntax tree on left and git diff on right. Highlights the single threshold 'distance <= 2.0' in red and the oscillation signal waveform fluctuating rapidly between Lock and Unlock.",
+    "fallback_mermaid": "graph LR\n  COMMIT[Regression Commit: 7f2a1b] --> CODE[proximity_controller.py:L45]\n  CODE --> LOGIC[Single Threshold: distance <= 2.0m]\n  LOGIC --> FAIL[Boundary Oscillation: Lock/Unlock Churn]\n  style LOGIC fill:#ffbbbb,stroke:#ff0000,stroke-width:2px"
+  }
+}

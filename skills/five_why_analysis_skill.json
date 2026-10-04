@@ -1,0 +1,89 @@
+{
+  "$schema": "https://axiom.cloud.google.com/schemas/skill.v1.json",
+  "skill_id": "five_why_analysis_skill",
+  "skill_name": "5 Why Analysis Skill",
+  "version": "1.0.0",
+  "target_masters": ["ENG.ai"],
+  "applicable_capabilities": [
+    "five_why_analysis",
+    "root_cause_analysis",
+    "retrospective"
+  ],
+  "competence_summary": "Executes iterative 5-Why root cause drilldowns, grounding each causal inference in verifiable evidence (code, test, or process) to trace from immediate defect symptom down to root systemic failure.",
+  "reasoning_heuristics": [
+    "Step 1 (Why 1 - Symptom): Why did the car rapidly unlock and lock repeatedly? -> Proximity state oscillated rapidly between True and False.",
+    "Step 2 (Why 2 - Code): Why did proximity state oscillate? -> proximity_controller.py checked a single threshold (distance <= 2.0) without a hysteresis deadband.",
+    "Step 3 (Why 3 - Design): Why was a single threshold implemented? -> Architectural specification REQ-004 omitted explicit hysteresis margin for noisy RF RSSI signal.",
+    "Step 4 (Why 4 - Testing): Why was this not caught in QA? -> Test suite tests/test_proximity_controller.py only evaluated static discrete points (1.0m, 3.0m) and omitted dynamic boundary jitter.",
+    "Step 5 (Why 5 - Process/Systemic): Why were boundary test cases omitted? -> Boundary test verification checklist was not enforced in CI pipeline for RF/sensor modules.",
+    "Step 6: Formulate systemic counter-measures for each validated Why layer."
+  ],
+  "required_evidence_artifacts": [
+    {
+      "artifact_type": "why_layer_1_manifestation",
+      "source_system": "github_tracker",
+      "mandatory_fields": ["observed_phenomenon", "evidence_ref"]
+    },
+    {
+      "artifact_type": "why_layer_2_code_condition",
+      "source_system": "synthetic_git",
+      "mandatory_fields": ["source_code_snippet", "failing_line"]
+    },
+    {
+      "artifact_type": "why_layer_3_design_omission",
+      "source_system": "neo4j_kg",
+      "mandatory_fields": ["requirement_id", "specification_gap"]
+    },
+    {
+      "artifact_type": "why_layer_4_test_gap",
+      "source_system": "synthetic_qa",
+      "mandatory_fields": ["test_coverage_gap", "missing_assertions"]
+    },
+    {
+      "artifact_type": "why_layer_5_governance_breakdown",
+      "source_system": "project_manifest",
+      "mandatory_fields": ["process_checkpoint", "remedial_policy"]
+    }
+  ],
+  "candidate_agents": [
+    {
+      "agent_id": "codefix_agent",
+      "delegation_goal": "Validate Why 2 code condition and AST logic."
+    },
+    {
+      "agent_id": "defect_agent",
+      "delegation_goal": "Validate Why 1 customer manifestation."
+    },
+    {
+      "agent_id": "requirement_agent",
+      "delegation_goal": "Validate Why 3 specification omission in Neo4j."
+    },
+    {
+      "agent_id": "test_agent",
+      "delegation_goal": "Validate Why 4 test gap in QA suite."
+    }
+  ],
+  "guardrails": {
+    "input_guardrails": [
+      "Initial problem statement must describe an observed defect symptom.",
+      "Must not accept circular or speculative reasoning without backing evidence envelopes."
+    ],
+    "safety_guardrails": [
+      "ENG.ai must avoid assigning personal blame; focus on technical mechanisms and systemic processes."
+    ]
+  },
+  "evaluation_criteria": {
+    "minimum_evidence_count": 5,
+    "pass_conditions": [
+      "All 5 Why stages logically chained and evidenced.",
+      "Root cause grounded in deterministic technical facts.",
+      "Preventive counter-measures drafted for technical (Why 2) and process (Why 5) levels."
+    ]
+  },
+  "visual_first_specification": {
+    "requires_visual": true,
+    "visual_format": "hierarchical_causal_tree",
+    "visual_generation_prompt": "A modern corporate hierarchical causal tree diagram showing 5 distinct steps descending from top to bottom. Each step has a bold 'Why' bubble with an associated evidence badge (Git icon, Neo4j icon, Test icon) in high-tech glowing cyan and purple palette.",
+    "fallback_mermaid": "graph TD\n  W1[Why 1: Lock/Unlock Churn] --> W2[Why 2: Single Threshold <= 2.0m]\n  W2 --> W3[Why 3: REQ-004 Missing Hysteresis Spec]\n  W3 --> W4[Why 4: Test Suite Missing Jitter Cases]\n  W4 --> W5[Why 5: CI Gate Lacked Boundary Checklist]\n  style W2 fill:#ffcccc,stroke:#cc0000\n  style W5 fill:#ffe0b2,stroke:#f57c00"
+  }
+}

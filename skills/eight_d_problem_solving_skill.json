@@ -1,0 +1,87 @@
+{
+  "$schema": "https://axiom.cloud.google.com/schemas/skill.v1.json",
+  "skill_id": "eight_d_problem_solving_skill",
+  "skill_name": "8D Problem Solving Skill",
+  "version": "1.0.0",
+  "target_masters": ["ENG.ai"],
+  "applicable_capabilities": [
+    "eight_d_analysis",
+    "root_cause_analysis",
+    "code_fixing"
+  ],
+  "competence_summary": "Executes the standardized 8 Disciplines (8D) methodology for customer and production defects: Team (D1), Problem Description (D2), Containment (D3), Root Cause (D4), Permanent Corrective Action (D5), Implementation & Validation (D6), Prevention (D7), and Team Recognition (D8).",
+  "reasoning_heuristics": [
+    "Step 1 (D1/D2): Establish investigation scope, problem statement (What, Where, When, How Big), and customer impact.",
+    "Step 2 (D3): Formulate interim containment action (e.g. feature flag disable or threshold widening) to protect customer while fixing.",
+    "Step 3 (D4): Delegate to codefix_agent & test_agent to isolate proven technical root cause and escape point.",
+    "Step 4 (D5): Formulate and choose Permanent Corrective Action (PCA) (e.g. dual-threshold hysteresis band with debounce timer).",
+    "Step 5 (D6): Implement patch and validate with passing regression tests (tests/test_proximity_controller.py).",
+    "Step 6 (D7): Define systemic preventive actions (e.g. lint rules for stateful boundaries, mandatory HIL boundary test checklist).",
+    "Step 7 (D8): Package 8D dossier for engineering sign-off."
+  ],
+  "required_evidence_artifacts": [
+    {
+      "artifact_type": "d2_problem_description_envelope",
+      "source_system": "github_tracker",
+      "mandatory_fields": ["issue_id", "symptom", "customer_environment", "failure_frequency"]
+    },
+    {
+      "artifact_type": "d3_containment_action_proof",
+      "source_system": "cloud_run_config",
+      "mandatory_fields": ["containment_mechanism", "risk_mitigation_level"]
+    },
+    {
+      "artifact_type": "d4_root_cause_evidence",
+      "source_system": "synthetic_git",
+      "mandatory_fields": ["failing_file", "failing_line", "regression_commit", "why_escaped"]
+    },
+    {
+      "artifact_type": "d5_chosen_permanent_corrective_action",
+      "source_system": "synthetic_git",
+      "mandatory_fields": ["patch_diff", "design_rationale"]
+    },
+    {
+      "artifact_type": "d6_validation_test_run",
+      "source_system": "synthetic_qa",
+      "mandatory_fields": ["test_suite", "passed_count", "failed_count", "execution_timestamp"]
+    }
+  ],
+  "candidate_agents": [
+    {
+      "agent_id": "codefix_agent",
+      "delegation_goal": "Provide D4 root cause code evidence and draft D5 surgical patch."
+    },
+    {
+      "agent_id": "test_agent",
+      "delegation_goal": "Execute D6 validation test runs and document D7 test coverage additions."
+    },
+    {
+      "agent_id": "defect_agent",
+      "delegation_goal": "Retrieve D2 customer defect facts and verify D3 containment readiness."
+    }
+  ],
+  "guardrails": {
+    "input_guardrails": [
+      "Customer bug report or defect ticket must be authoritative.",
+      "Reproduction steps must be documented."
+    ],
+    "safety_guardrails": [
+      "ENG.ai must NOT close D6 without passing test validation run evidence.",
+      "ENG.ai must NOT mark 8D complete without human engineering lead approval."
+    ]
+  },
+  "evaluation_criteria": {
+    "minimum_evidence_count": 4,
+    "pass_conditions": [
+      "Disciplines D1 through D7 populated with verifiable evidence envelopes.",
+      "Root cause (D4) directly matches observed physical symptom (D2).",
+      "Corrective action (D5) validated by regression test suite (D6)."
+    ]
+  },
+  "visual_first_specification": {
+    "requires_visual": true,
+    "visual_format": "eight_d_ishikawa_dossier",
+    "visual_generation_prompt": "An executive Ishikawa Fishbone diagram showing the customer bug at the head (Lock Oscillation at 2.0m) and fishbone ribs for Machine, Method, Material, Measurement, Environment, and People, with the proven root cause highlighted in glowing green with an 8D badge.",
+    "fallback_mermaid": "graph LR\n  D1[D1: Team Formed] --> D2[D2: Problem Defined]\n  D2 --> D3[D3: Interim Containment]\n  D3 --> D4[D4: Root Cause Found: No Hysteresis]\n  D4 --> D5[D5: PCA Chosen: 1.8m/2.2m Band]\n  D5 --> D6[D6: PCA Verified: Pytest Pass]\n  D6 --> D7[D7: Prevention: Boundary Checklist]\n  style D4 fill:#ffdddd,stroke:#ff0000\n  style D6 fill:#ddffdd,stroke:#00aa00"
+  }
+}
