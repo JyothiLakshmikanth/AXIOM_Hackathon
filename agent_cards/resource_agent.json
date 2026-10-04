@@ -4,14 +4,10 @@
   "name": "Resource & Capacity Intelligence Specialist Agent",
   "version": "1.0.0",
   "framework": "LangChain ReAct Agent",
-  "role_description": "Specialized agent dedicated to engineer capacity modeling, team velocity tracking, sprint allocation balancing, and team skills retrieval using Qdrant vector search and BigQuery project data.",
+  "role_description": "Specialized agent dedicated to engineer capacity modeling, team velocity tracking, sprint allocation balancing, and team skills retrieval using BigQuery analytical datasets and project telemetry.",
   "primary_knowledge_source": {
-    "system": "Qdrant Vector DB",
-    "collections": ["team_competencies", "project_manifest", "pi_planning_docs"]
-  },
-  "secondary_knowledge_source": {
-    "system": "BigQuery Resource Datasets",
-    "tables": ["resources", "resource_allocations", "sprints", "milestones"]
+    "system": "BigQuery Resource & Velocity Datasets",
+    "tables": ["resources", "resource_allocations", "sprints", "milestones", "team_competencies"]
   },
   "input_schema": {
     "type": "object",
@@ -78,8 +74,8 @@
       "description": "Retrieves planned engineer assignments, story points, and hours."
     },
     {
-      "name": "qdrant_search_team_skills_and_manifest",
-      "description": "Performs dense semantic vector search for team competencies in Qdrant."
+      "name": "bigquery_search_team_skills_and_manifest",
+      "description": "Performs skill matching and competency queries in BigQuery."
     },
     {
       "name": "compute_rebalanced_sprint_capacity",

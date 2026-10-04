@@ -7,12 +7,12 @@
   "role_description": "Specialized agent dedicated to requirement extraction, upstream/downstream dependency traversal, and ripple impact analysis using the Neo4j Knowledge Graph and Qdrant semantic embeddings.",
   "primary_knowledge_source": {
     "system": "Neo4j Knowledge Graph",
-    "nodes": ["Requirement", "Feature", "Component", "Milestone", "TestCase"],
-    "edges": ["DEPENDS_ON", "IMPLEMENTED_BY", "VERIFIED_BY", "ALLOCATED_TO"]
+    "nodes": ["ArtifactType", "BusinessComponent", "OEM", "Requirement", "TestCase", "Variant", "VerificationLevel"],
+    "edges": ["ALLOCATED_TO", "CHILD_OF", "CO_ALLOCATED_WITH", "CONSTRAINS", "MITIGATES_RISK_OF", "PARENT_OF", "SEMANTIC_AFFINITY", "TARGETS_VARIANT", "VARIANT_DIVERGENCE_OF"]
   },
   "secondary_knowledge_source": {
-    "system": "Qdrant Vector DB",
-    "collections": ["project_manifest", "requirements_embeddings"]
+    "system": "Neo4j Vector Index",
+    "indexes": ["requirement_embeddings"]
   },
   "input_schema": {
     "type": "object",

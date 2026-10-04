@@ -13,7 +13,7 @@
   "competence_summary": "Traverses the Neo4j Knowledge Graph to compute upstream and downstream ripple impacts, architectural dependencies, and delivery milestone blast radius when a component or requirement changes or fails.",
   "reasoning_heuristics": [
     "Step 1: Identify root entity (e.g. REQ-004 Passive Keyless Entry or proximity_controller.py).",
-    "Step 2: Delegate to requirement_agent to execute Cypher queries in Neo4j traversing (:Requirement)-[:DEPENDS_ON|IMPLEMENTED_BY|VERIFIED_BY*1..3]->().",
+    "Step 2: Delegate to requirement_agent to execute Cypher queries in Neo4j traversing (:Requirement)-[:PARENT_OF|CHILD_OF|CONSTRAINS|MITIGATES_RISK_OF|VARIANT_DIVERGENCE_OF*1..3]->().",
     "Step 3: Extract affected downstream features, dependent microservices, hardware interfaces, and test suites.",
     "Step 4: Cross-reference with delivery milestones (e.g. Milestone Alpha - Golden Run) to compute delivery risk score.",
     "Step 5: Score the blast radius: Low (< 2 downstream nodes), Medium (2-5 nodes), High (5-10 nodes), Critical (> 10 nodes or critical path milestone affected)."

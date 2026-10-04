@@ -157,7 +157,7 @@ def get_impact_by_ids(requirement_ids: list) -> list:
     if drv:
         cypher_query = """
         MATCH (req:Requirement) WHERE req.id IN $req_ids
-        OPTIONAL MATCH (req)-[:PARENT_OF|CHILD_OF|DEPENDS_ON]-(dep_req:Requirement)
+        OPTIONAL MATCH (req)-[:PARENT_OF|CHILD_OF|CONSTRAINS|MITIGATES_RISK_OF|VARIANT_DIVERGENCE_OF|DEPENDS_ON]-(dep_req:Requirement)
         OPTIONAL MATCH (req)-[:VERIFIED_BY|VALIDATED_BY]->(tc:TestCase)
         OPTIONAL MATCH (req)-[:ALLOCATED_TO]->(comp:BusinessComponent)
         OPTIONAL MATCH (req)-[:TARGETS_VARIANT]->(v:Variant)

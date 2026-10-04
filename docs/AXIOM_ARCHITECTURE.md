@@ -179,11 +179,8 @@ graph TD
 
   REQ_C1 -->|ALLOCATED_TO| COMP
   REQ_C1 -->|TARGETS_VARIANT| VAR
-  REQ_C1 -->|CUSTOMIZED_FOR_OEM| OEM
-  REQ_C1 -->|IS_OF_TYPE| TYPE
-  REQ_C1 -->|VERIFIED_AT_LEVEL| VL
-  REQ_C1 -->|VERIFIED_BY| TC
-  TC -->|VERIFIES| REQ_C1
+  REQ_C2 -->|CONSTRAINS<br/>policy boundary| REQ_C1
+  REQ_C2 -->|MITIGATES_RISK_OF<br/>relay attack mitigation| REQ_C1
 
   %% Semantic Relationships
   REQ_C1 <-->|VARIANT_DIVERGENCE_OF<br/>shared_parent: REQ-L3-002| REQ_C2
@@ -194,16 +191,19 @@ graph TD
   style Core_Requirement fill:#e3f2fd,stroke:#1976d2
 ```
 
-### Knowledge Graph Metrics (Generated from CSV):
-- **Total Nodes**: 179
-  - 74 Requirements (with rich text metadata: `primary_text`, `verification_criteria`, `variant_implementation_notes`)
-  - 5 Business Components (`System`, `Mobile App`, `Cloud Key Service`, `Security Module`, `Vehicle Controller`)
-  - 4 Variants (`VAR-BASE`, `VAR-PREM`, `VAR-FLEET`, `VAR-GLOB`)
-  - 6 OEMs (`All OEMs`, `OEM-A`, `OEM-B`, `OEM-C`, `OEM-US`, `All Global OEMs`)
-  - 79 Test Cases
-- **Total Edges**: 877
-  - **718 Direct Relationships**: `CHILD_OF`, `PARENT_OF`, `ALLOCATED_TO`, `TARGETS_VARIANT`, `CUSTOMIZED_FOR_OEM`, `VERIFIED_BY`, `IS_OF_TYPE`, `VERIFIED_AT_LEVEL`.
-  - **159 Semantic Relationships**: `VARIANT_DIVERGENCE_OF` (sibling requirements under same parent targeting different variants), `CO_ALLOCATED_WITH` (coupled execution on same component), and `SEMANTIC_AFFINITY` (topical domain overlap across text metadata).
+### Knowledge Graph Metrics (Live Neo4j AuraDB Instance):
+- **103 Total Nodes**:
+  - `Requirement`: System & stakeholder requirement nodes with rich text metadata (`primary_text`, `verification_criteria`, `variant_implementation_notes`)
+  - `TestCase`: Verification test cases linked directly to requirements
+  - `BusinessComponent`: Allocated subsystem modules (`Vehicle Controller`, `Mobile App`, `Cloud Key Service`, `Security Module`, `System`)
+  - `Variant`: Target vehicle variants (`VAR-BASE`, `VAR-PREM`, `VAR-FLEET`, `VAR-GLOB`)
+  - `OEM`: Customization targets (`All OEMs`, `OEM-A`, `OEM-B`, `OEM-C`, `OEM-US`, `All Global OEMs`)
+  - `ArtifactType`: Stakeholder, Software, and System requirement categorizations
+  - `VerificationLevel`: Acceptance, Integration, and System verification stages
+- **266 Total Relationships**:
+  - **Structural Traceability**: `PARENT_OF`, `CHILD_OF`, `ALLOCATED_TO`, `TARGETS_VARIANT`, `CONSTRAINS`
+  - **Safety & Risk Mitigation**: `MITIGATES_RISK_OF`
+  - **Semantic Reasoning & Divergence**: `VARIANT_DIVERGENCE_OF`, `CO_ALLOCATED_WITH`, `SEMANTIC_AFFINITY`
 
 ---
 

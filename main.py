@@ -29,7 +29,7 @@ def print_banner():
        _    __  _____ ___  __  __
       / \\   \\ \\/ /_ _/ _ \\|  \\/  |   AXIOM: Multi-Agent Intelligence Platform
      / _ \\   \\  / | | | | | |\\/| |   Masters: PM.ai & ENG.ai
-    / ___ \\  /  \\ | | |_| | |  | |   Grounding: Neo4j KG | Firestore | Qdrant
+    / ___ \\  /  \\ | | |_| | |  | |   Grounding: Neo4j KG | Firestore | BigQuery Vector Lake
    /_/   \\_\\/_/\\_\\___\\___/|_|  |_|   Deployment: Google Cloud Platform (Cloud Run)
 ================================================================================
 """
