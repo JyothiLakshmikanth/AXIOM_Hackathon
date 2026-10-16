@@ -56,7 +56,7 @@ class AxiomState(TypedDict, total=False):
     # Intent Router Outputs
     intent_clarified: bool
     clarification: Dict[str, Any]
-    target_master: Optional[str]  # "PM.ai" or "ENG.ai"
+    target_master: Optional[str]  # "AXIOM-PM" or "AXIOM-ENG"
     target_capability: Optional[str]
     confidence_score: float
 
@@ -81,3 +81,20 @@ class AxiomState(TypedDict, total=False):
     visual_artifact: Dict[str, Any]
     structured_answer: Dict[str, Any]
     final_output_markdown: str
+
+    # AXIOM 9-Node Architecture Fields
+    planner_decision: Dict[str, Any]  # {agent_id, agent_prompt, gap, rationale, expected_evidence_type, stopping_condition}
+    required_evidence_dimensions: List[str]  # what evidence dimensions are needed to answer query
+    resolved_intent: str  # classified capability intent from REASON node
+    evidence_sufficiency: str  # "SUFFICIENT" | "PARTIAL" | "INSUFFICIENT"
+    material_gaps: List[str]  # unfilled evidence gaps that block synthesis
+    cross_handoff_needed: bool  # does PM.ai need to handoff to ENG.ai or vice versa
+    cross_handoff_request: Dict[str, Any]  # request payload for cross-master handoff
+    cross_handoff_response: str  # response from receiving master
+    cross_handoff_done: bool  # handoff completion flag
+    response_mode: str  # "text_only" | "text_and_image" | "image_only"
+    human_validation_required: bool  # does response require human review before delivery
+    human_validation_result: str  # "APPROVED" | "REJECTED" | "REQUEST_MORE"
+    human_feedback: str  # human reviewer feedback
+    hitl_loop_count: int  # count of human-in-the-loop review iterations
+    agent_prompt: str  # specialized prompt created by PLAN node for agent execution

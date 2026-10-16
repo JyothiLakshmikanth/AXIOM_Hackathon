@@ -30,7 +30,7 @@ logger = logging.getLogger("axiom.app")
 
 app = FastAPI(
     title="AXIOM Multi-Agent Intelligence System",
-    description="Google Cloud-deployed Evidence-Driven Multi-Agent System with PM.ai & ENG.ai Masters.",
+    description="Google Cloud-deployed Evidence-Driven Multi-Agent System with AXIOM-PM & AXIOM-ENG Masters.",
     version="1.0.0"
 )
 
@@ -63,7 +63,7 @@ def healthcheck():
         "service": "axiom-orchestrator",
         "cloud_provider": "Google Cloud Platform",
         "runtime": "Cloud Run / Python 3.12",
-        "masters": ["PM.ai", "ENG.ai"],
+        "masters": ["AXIOM-PM", "AXIOM-ENG"],
         "knowledge_graph_nodes": len(_DYNAMIC_KG.nodes),
         "knowledge_graph_edges": len(_DYNAMIC_KG.edges)
     }
@@ -96,7 +96,7 @@ def get_kg_stats():
 def handle_chat(payload: ChatRequest):
     """
     Main Orchestration Endpoint:
-    Executes top-level intent router, PM.ai / ENG.ai cognitive master loops,
+    Executes top-level intent router, AXIOM-PM / AXIOM-ENG cognitive master loops,
     and visual-first image generation.
     """
     query = payload.query.strip()

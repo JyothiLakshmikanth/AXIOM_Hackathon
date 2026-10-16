@@ -1,147 +1,184 @@
 """
 Top-Level Intent Router and Clarification Node for AXIOM.
-Analyzes user queries, determines intent clarity, and routes to either PM.ai or ENG.ai Master,
-or immediately terminates the run with targeted clarification questions.
+LLM-DRIVEN SEMANTIC CLASSIFICATION (not keyword matching).
+
+Routes queries to PM.ai or ENG.ai based on master domain boundaries:
+  - PM.ai: Macro-level delivery (schedule, resource, risk, preliminary hypothesis)
+  - ENG.ai: Micro-level technical (code, architecture, confirmed RCA, testing)
 """
 
 import os
-import re
 import json
 import logging
-from typing import Dict, Any, List, Tuple
-from orchestrator.state import AxiomState, ClarificationState
+from typing import Dict, Any
+from orchestrator.state import AxiomState
+from orchestrator.prompt_loader import load_prompt
+from orchestrator.gcp_client import get_gcp_client
 
 logger = logging.getLogger("axiom.orchestrator.router")
 
-# Ambiguous keywords that lack necessary context
-VAGUE_QUERY_PATTERNS = [
-    r"^(hi|hello|hey|help|what can you do)\b",
-    r"^(fix|check|analyze|investigate|look at)\s*(this|it|the issue|everything|something)?$",
-    r"^what is the status\??$",
-    r"^tell me about the project\??$"
-]
 
-PM_CAPABILITIES = {
-    "preliminary_rca": ["preliminary rca", "high-level rca", "blast radius", "triage defect", "leakage direction"],
-    "defect_triage": ["triage", "severity", "urgency", "classify defect", "issue 107", "gh-issue-107", "bug triage"],
-    "requirement_impact": ["requirement", "req-", "impact analysis", "traceability", "dependent requirement", "unlock", "ble", "uwb", "offline grace", "valet"],
-    "project_health": ["project health", "status", "delivery health", "scorecard", "commitments"],
-    "sprint_replanning": ["replan", "replanning", "rebalance", "capacity rebalancing", "sprint slip", "sprint 4 replan"],
-    "sprint_timeline_analysis": ["timeline", "critical path", "schedule variance", "forecast completion", "gantt"],
-    "pi_planning": ["pi planning", "program increment", "quarterly planning", "pi roadmap"],
-    "retrospective": ["retrospective", "sprint retro", "lessons learned", "volatility retro"]
-}
-
-ENG_CAPABILITIES = {
-    "root_cause_analysis": ["deep rca", "code rca", "root cause", "ast inspection", "regression commit", "single threshold"],
-    "eight_d_analysis": ["8d", "eight disciplines", "ishikawa", "fishbone", "containment action", "permanent corrective action"],
-    "five_why_analysis": ["5 why", "five why", "why analysis", "causal ladder"],
-    "code_fixing": ["code fix", "patch", "surgical fix", "hysteresis fix", "generate patch", "pull request", "fix code"],
-    "test_case_generation": ["generate test", "test case generation", "pytest", "boundary test", "oscillation test"],
-    "increasing_test_coverage": ["increase coverage", "test coverage", "branch coverage", "untested branch"]
-}
-
-
-def analyze_intent(query: str) -> Dict[str, Any]:
+def analyze_intent_with_llm(query: str) -> Dict[str, Any]:
     """
-    Analyzes user query to extract intent, target master, target capability, and entities.
-    Determines if clarification is required before proceeding.
-    """
-    cleaned_query = query.strip().lower()
+    LLM-DRIVEN semantic intent classification.
+    Uses the "21_intent_detection_classifier" prompt from axiom_prompts_common.json
+    to intelligently route to PM.ai or ENG.ai based on master domain boundaries.
 
-    # Check for obvious ambiguous / underspecified queries
-    for pattern in VAGUE_QUERY_PATTERNS:
-        if re.search(pattern, cleaned_query):
+    Returns:
+    {
+        "domain": "PJM" | "ENG" | "NEEDS_CLARIFICATION",
+        "boundary_classification": "macro_delivery" | "micro_technical" | "cross_domain",
+        "confidence": "High" | "Medium" | "Low",
+        "reasoning": "Why this query maps to [domain] master",
+        "target_master": "AXIOM-PM" | "AXIOM-ENG" | None,
+        "target_capability": str or None,
+        "clarification_questions": List[str] or []
+    }
+    """
+    try:
+        # Load the intent detection classifier prompt from axiom_prompts_common.json
+        intent_classifier_prompt = load_prompt("AXIOM-PM", "intent_detection_classifier")
+
+        # Prepare LLM input
+        llm_input = f"""
+{intent_classifier_prompt}
+
+---
+
+USER QUERY:
+"{query}"
+
+---
+
+Based on the above classification framework, analyze this user query and return a JSON response with:
+- domain: "PJM" | "ENG" | "NEEDS_CLARIFICATION"
+- boundary_classification: "macro_delivery" | "micro_technical" | "cross_domain"
+- confidence: "High" | "Medium" | "Low"
+- reasoning: explanation of why this query maps to the selected domain
+- target_capability: (for PJM or ENG) the specific intent from the taxonomy, or null
+"""
+
+        # Call Gemini LLM for semantic classification
+        gcp = get_gcp_client()
+        llm_response = gcp.call_gemini(
+            system_prompt="You are an expert intent router for intelligent systems. Classify user queries semantically (not by keyword matching) into project delivery (PJM) or engineering (ENG) domains.",
+            user_input=llm_input,
+            temperature=0.3  # Low temperature for consistent routing decisions
+        )
+
+        # Parse LLM response
+        try:
+            # Try to extract JSON from response
+            import re
+            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
+            if json_match:
+                classification = json.loads(json_match.group())
+            else:
+                classification = json.loads(llm_response)
+        except json.JSONDecodeError:
+            logger.warning(f"LLM response not valid JSON. Response: {llm_response}")
             return {
                 "clarification_needed": True,
-                "ambiguity_reason": "Query lacks specific entity context (e.g., defect ID, sprint number, or technical goal).",
+                "domain": "NEEDS_CLARIFICATION",
+                "confidence": "Low",
+                "ambiguity_reason": "Could not classify intent reliably. Please clarify: Are you asking about (1) delivery/project (PM), (2) technical/code (ENG), or (3) both?",
                 "clarification_questions": [
-                    "Are you looking for project-level delivery triage (PM.ai) or technical code-level investigation (ENG.ai)?",
-                    "Do you have a specific defect ticket (e.g., GH-ISSUE-107) or sprint (e.g., SPRINT-04) you want to analyze?",
-                    "Would you like an 8D root-cause investigation, sprint replanning proposal, or test coverage expansion?"
+                    "Are you requesting Project Management analysis (schedule, resource, delivery risk)?",
+                    "Are you requesting Engineering analysis (code, architecture, RCA, testing)?",
+                    "Do you need both perspectives?"
                 ],
                 "target_master": None,
                 "target_capability": None,
                 "confidence_score": 0.2
             }
 
-    # Match Engineering capabilities
-    for cap, keywords in ENG_CAPABILITIES.items():
-        if any(kw in cleaned_query for kw in keywords):
-            return {
-                "clarification_needed": False,
-                "target_master": "ENG.ai",
-                "target_capability": cap,
-                "confidence_score": 0.95,
-                "reasoning_summary": f"Detected technical engineering intent matching capability '{cap}'. Routed to ENG.ai.",
-                "clarification_questions": []
-            }
-
-    # Match PM capabilities
-    for cap, keywords in PM_CAPABILITIES.items():
-        if any(kw in cleaned_query for kw in keywords):
-            return {
-                "clarification_needed": False,
-                "target_master": "PM.ai",
-                "target_capability": cap,
-                "confidence_score": 0.95,
-                "reasoning_summary": f"Detected project management / delivery governance intent matching capability '{cap}'. Routed to PM.ai.",
-                "clarification_questions": []
-            }
-
-    # Default fallback routing if mentions bugs/issues
-    if "bug" in cleaned_query or "issue" in cleaned_query:
-        return {
-            "clarification_needed": False,
-            "target_master": "PM.ai",
-            "target_capability": "defect_triage",
-            "confidence_score": 0.85,
-            "reasoning_summary": "Issue mention detected. Defaulting to initial defect triage with PM.ai.",
-            "clarification_questions": []
+        # Map domain to target_master
+        domain_to_master = {
+            "PJM": "AXIOM-PM",
+            "ENG": "AXIOM-ENG",
+            "BOTH": "AXIOM-PM"  # Start with PM if both needed
         }
 
-    # If completely unrecognized, request clarification rather than guessing wrong
-    return {
-        "clarification_needed": True,
-        "ambiguity_reason": "Could not determine whether this inquiry pertains to Project Delivery (PM.ai) or Code Engineering (ENG.ai).",
-        "clarification_questions": [
-            "Are you requesting Project Management governance (e.g., sprint replanning, defect triage, timeline forecasting)?",
-            "Are you requesting Engineering analysis (e.g., code-level RCA, 8D problem solving, pytest generation, surgical patch)?",
-            "Which component or ticket should we target (e.g., proximity_controller.py or GH-ISSUE-107)?"
-        ],
-        "target_master": None,
-        "target_capability": None,
-        "confidence_score": 0.3
-    }
+        target_master = domain_to_master.get(classification.get("domain"), None)
+        target_capability = classification.get("target_capability")
+        confidence_score = {"High": 0.95, "Medium": 0.70, "Low": 0.4}.get(
+            classification.get("confidence", "Low"), 0.4
+        )
+
+        # Build response
+        response = {
+            "clarification_needed": classification.get("domain") == "NEEDS_CLARIFICATION",
+            "domain": classification.get("domain"),
+            "target_master": target_master,
+            "target_capability": target_capability,
+            "confidence_score": confidence_score,
+            "boundary_classification": classification.get("boundary_classification"),
+            "reasoning_summary": classification.get("reasoning"),
+            "clarification_questions": classification.get("clarification_questions", [])
+        }
+
+        if response["clarification_needed"]:
+            response["ambiguity_reason"] = classification.get("reasoning", "Unclear intent")
+
+        return response
+
+    except Exception as e:
+        logger.error(f"LLM-driven classification failed: {e}. Falling back to clarification.")
+        return {
+            "clarification_needed": True,
+            "domain": "NEEDS_CLARIFICATION",
+            "confidence": "Low",
+            "ambiguity_reason": f"Classification error (non-blocking). Please clarify your question.",
+            "clarification_questions": [
+                "Are you asking about project delivery/schedule (PM) or technical/code analysis (ENG)?",
+                "Do you have a specific defect ticket, sprint, or component to focus on?",
+                "Would you like delivery impact analysis, technical RCA, or both?"
+            ],
+            "target_master": None,
+            "target_capability": None,
+            "confidence_score": 0.3
+        }
 
 
 def router_node(state: AxiomState) -> AxiomState:
     """
     LangGraph Node: Top-level intent router.
-    Evaluates state['query'] and populates routing decision or clarification payload.
+    Uses LLM-driven semantic classification to route to PM.ai or ENG.ai.
+    Falls back to clarification if intent is ambiguous.
     """
     query = state.get("query", "")
-    decision = analyze_intent(query)
+    logger.info(f"ROUTER: Classifying query: {query[:100]}...")
 
-    state["intent_clarified"] = not decision["clarification_needed"]
+    # LLM-driven semantic classification (not keyword matching)
+    decision = analyze_intent_with_llm(query)
+
+    # Populate state
+    state["intent_clarified"] = not decision.get("clarification_needed", False)
     state["target_master"] = decision.get("target_master")
     state["target_capability"] = decision.get("target_capability")
     state["confidence_score"] = decision.get("confidence_score", 0.0)
+    state["boundary_classification"] = decision.get("boundary_classification")
 
-    if decision["clarification_needed"]:
+    logger.info(
+        f"ROUTER: Classification complete. Master={state['target_master']}, "
+        f"Confidence={state['confidence_score']}, Clarification={'Y' if decision.get('clarification_needed') else 'N'}"
+    )
+
+    if decision.get("clarification_needed"):
         state["clarification"] = {
             "clarification_needed": True,
-            "ambiguity_reason": decision["ambiguity_reason"],
-            "clarification_questions": decision["clarification_questions"]
+            "ambiguity_reason": decision.get("ambiguity_reason", "Unclear intent"),
+            "clarification_questions": decision.get("clarification_questions", [])
         }
         state["final_output_markdown"] = (
             "### Clarification Needed\n\n"
             f"> [!IMPORTANT]\n"
-            f"> {decision['ambiguity_reason']}\n\n"
+            f"> {decision.get('ambiguity_reason', 'Unclear intent')}\n\n"
             "To provide you with the most accurate analysis, please clarify:\n"
-            + "\n".join(f"- {q}" for q in decision["clarification_questions"])
+            + "\n".join(f"- {q}" for q in decision.get("clarification_questions", []))
         )
     else:
         state["clarification"] = {"clarification_needed": False}
+        logger.info(f"ROUTER: Routed to {state['target_master']} with capability '{state['target_capability']}'")
 
     return state

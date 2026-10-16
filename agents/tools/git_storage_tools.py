@@ -1,7 +1,7 @@
 """
 Git & Cloud Storage Tools for AXIOM.
 Handles source code inspection, AST syntax parsing, regression commit diffs,
-and deterministic surgical patch generation for ENG.ai Master.
+and deterministic surgical patch generation for AXIOM-ENG Master.
 """
 
 import ast

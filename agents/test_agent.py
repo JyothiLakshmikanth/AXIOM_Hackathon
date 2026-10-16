@@ -5,7 +5,7 @@ Architecture: Authentic LangChain ReAct Loop + LLM (Gemini / Vertex AI) + Tools:
 2. `test_generation_tool`: Evaluates test coverage gaps and synthesizes new ISO 29119 test specifications and pytest suites.
 
 Data Foundation: Fetches directly from data/test_cases_master_v5.csv with TF-IDF semantic embedding search.
-Produces structured EvidenceEnvelopes and strict JSON contract outputs for PM.ai and ENG.ai Masters.
+Produces structured EvidenceEnvelopes and strict JSON contract outputs for AXIOM-PM and AXIOM-ENG Masters.
 """
 
 import os

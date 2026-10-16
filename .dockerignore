@@ -1,0 +1,111 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+htmlcov/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+.tox
+.coverage
+.hypothesis
+.pytest_cache
+test_results/
+coverage_html/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+credentials.json
+service-account.json
+
+# Build artifacts
+dist/
+build/
+*.tar.gz
+*.zip
+
+# Documentation
+docs/_build
+site/
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.log
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Cloud Run specific
+.gcloudignore
+app.yaml
+cloudbuild.yaml
+
+# Large files
+*.mp4
+*.mov
+*.avi
+*.wav
+*.zip
+*.7z
+
+# Node (if any frontend)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# OS
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride

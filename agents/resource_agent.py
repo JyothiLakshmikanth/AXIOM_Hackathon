@@ -14,7 +14,7 @@ logger = logging.getLogger("axiom.agents.resource")
 
 SYSTEM_PROMPT = """You are the Resource & Capacity Specialist Agent for AXIOM.
 Your mission is to query team skills, calculate velocity and volatility metrics, model engineer capacity,
-and formulate sprint replanning adjustments for PM.ai Master.
+and formulate sprint replanning adjustments for AXIOM-PM Master.
 
 Available Tools:
 - bigquery_get_team_velocity_history(sprint_id: str)

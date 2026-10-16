@@ -1,7 +1,7 @@
 """
 Code Analysis & Surgical Fix Specialist Agent.
 Implemented as a specialized LangChain ReAct agent performing AST inspection,
-regression commit isolation, and deterministic surgical patch generation for ENG.ai Master.
+regression commit isolation, and deterministic surgical patch generation for AXIOM-ENG Master.
 """
 
 import json
@@ -19,7 +19,7 @@ logger = logging.getLogger("axiom.agents.codefix")
 
 SYSTEM_PROMPT = """You are the Code Analysis & Surgical Fix Specialist Agent for AXIOM.
 Your mission is to inspect source code ASTs, analyze git commit diffs, isolate regression points,
-and synthesize verifiable surgical patches for ENG.ai Master.
+and synthesize verifiable surgical patches for AXIOM-ENG Master.
 
 Available Tools:
 - git_inspect_source_file(file_path: str)

@@ -52,8 +52,8 @@ with st.sidebar:
     
     st.divider()
     st.subheader("Masters & Specialized Agents")
-    st.write("• **PM.ai Master**: Project Management & Governance")
-    st.write("• **ENG.ai Master**: Code & Defect Engineering")
+    st.write("• **AXIOM-PM Master**: Project Management & Governance")
+    st.write("• **AXIOM-ENG Master**: Code & Defect Engineering")
     st.write("• **Specialized Agents**: Requirement (Neo4j), Defect, Test, Resource, CodeFix")
 
 # Main Chat Interface
@@ -77,10 +77,10 @@ for msg in st.session_state.messages:
 # Quick prompt chips
 col1, col2, col3 = st.columns(3)
 with col1:
-    if st.button("🛡️ PM.ai Defect Triage (GH-ISSUE-107)"):
+    if st.button("🛡️ AXIOM-PM Defect Triage (GH-ISSUE-107)"):
         st.session_state.temp_prompt = "What is the blast radius and defect triage for GH-ISSUE-107?"
 with col2:
-    if st.button("⚡ ENG.ai Code RCA (proximity_controller.py)"):
+    if st.button("⚡ AXIOM-ENG Code RCA (proximity_controller.py)"):
         st.session_state.temp_prompt = "Perform deep code RCA and generate surgical patch for proximity_controller.py"
 with col3:
     if st.button("🔍 Neo4j Requirement Impact"):

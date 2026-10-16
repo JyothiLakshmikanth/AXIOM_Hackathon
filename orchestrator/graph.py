@@ -1,7 +1,10 @@
 """
-AXIOM End-to-End Master StateGraph Orchestration.
-Integrates Intent Router, PM.ai Master, ENG.ai Master, and Pure-Python Visual Generation Node.
-Supports both formal LangGraph compiled graph and native standalone cognitive runner.
+AXIOM 9-Node End-to-End Master StateGraph Orchestration.
+Implements full 9-node LangGraph architecture with intelligent PLAN node, cross-handoff,
+conditional visual generation, and human-in-loop validation checkpoint.
+
+Nodes: REASON → PLAN → EXECUTE → OBSERVE → EVALUATE → CROSS_HANDOFF → SYNTHESIZE → VISUAL_GEN → HUMAN_VALIDATE
+Supports both formal LangGraph compiled graph and native AxiomCognitiveRunner.
 """
 
 import os
@@ -11,28 +14,38 @@ from typing import Dict, Any, Optional
 
 from orchestrator.state import AxiomState
 from orchestrator.router import router_node
-from orchestrator.visual_gen import visual_generation_node
-from orchestrator.pm_master import (
-    pm_reason_node,
-    pm_memory_retrieval_node,
-    pm_plan_select_skill_node,
-    pm_validate_node,
-    pm_execute_agent_node,
-    pm_observe_evidence_node,
-    pm_evaluate_node,
-    pm_synthesize_node,
-    pm_answer_node
+from orchestrator.master_nodes import (
+    reason_node,
+    memory_retrieval_node,
+    plan_node,
+    execute_agent_node,
+    observe_evidence_node,
+    evaluate_node
 )
-from orchestrator.eng_master import (
-    eng_reason_node,
-    eng_memory_retrieval_node,
-    eng_plan_select_skill_node,
-    eng_validate_node,
-    eng_execute_agent_node,
-    eng_observe_evidence_node,
-    eng_evaluate_node,
-    eng_synthesize_node,
-    eng_answer_node
+from orchestrator.advanced_nodes import (
+    cross_handoff_node,
+    synthesize_node,
+    visual_gen_node,
+    human_validate_node
+)
+from orchestrator.edge_routing import (
+    route_after_intent_router,
+    route_after_memory,
+    route_after_evaluate,
+    route_after_synthesize,
+    route_after_visual_gen,
+    route_after_hitl
+)
+
+# For AxiomCognitiveRunner (native 9-node runner)
+# These are now unified nodes, not pm_/eng_ prefixed
+from orchestrator.master_nodes import (
+    reason_node as unified_reason_node,
+    memory_retrieval_node as unified_memory_node,
+    plan_node as unified_plan_node,
+    execute_agent_node as unified_execute_node,
+    observe_evidence_node as unified_observe_node,
+    evaluate_node as unified_evaluate_node
 )
 
 logger = logging.getLogger("axiom.orchestrator.graph")
@@ -40,177 +53,228 @@ logger = logging.getLogger("axiom.orchestrator.graph")
 
 def build_axiom_langgraph():
     """
-    Constructs the canonical LangGraph StateGraph when langgraph is available.
+    Constructs the 9-node unified LangGraph StateGraph for AXIOM orchestration.
+
+    Both PM.ai and ENG.ai use the SAME 9-node loop. Master-specific behavior is
+    parameterized via state["target_master"] and loaded from registries.
+
+    Architecture:
+    START → ROUTER → [REASON → MEMORY → PLAN → EXECUTE → OBSERVE → EVALUATE]
+      ↓ (loop if insufficient, max 5 iterations)
+      → CROSS_HANDOFF (optional) → SYNTHESIZE → VISUAL_GEN (conditional)
+      → HUMAN_VALIDATE (HITL) → END
     """
     try:
         from langgraph.graph import StateGraph, END
 
         builder = StateGraph(AxiomState)
 
-        # 1. Register Router
+        # ============================================================================
+        # UNIFIED 9-NODE ARCHITECTURE (BOTH MASTERS SHARE THE SAME NODES)
+        # Master-specific behavior via state["target_master"] parameter
+        # ============================================================================
+
+        # 1. TOP-LEVEL ROUTER NODE
         builder.add_node("router", router_node)
-
-        # 2. Register PM.ai Master Nodes
-        builder.add_node("pm_reason", pm_reason_node)
-        builder.add_node("pm_memory_retrieval", pm_memory_retrieval_node)
-        builder.add_node("pm_plan", pm_plan_select_skill_node)
-        builder.add_node("pm_validate", pm_validate_node)
-        builder.add_node("pm_execute_agent", pm_execute_agent_node)
-        builder.add_node("pm_observe", pm_observe_evidence_node)
-        builder.add_node("pm_evaluate", pm_evaluate_node)
-        builder.add_node("pm_synthesize", pm_synthesize_node)
-        builder.add_node("pm_visual_gen", visual_generation_node)
-        builder.add_node("pm_answer", pm_answer_node)
-
-        # 3. Register ENG.ai Master Nodes
-        builder.add_node("eng_reason", eng_reason_node)
-        builder.add_node("eng_memory_retrieval", eng_memory_retrieval_node)
-        builder.add_node("eng_plan", eng_plan_select_skill_node)
-        builder.add_node("eng_validate", eng_validate_node)
-        builder.add_node("eng_execute_agent", eng_execute_agent_node)
-        builder.add_node("eng_observe", eng_observe_evidence_node)
-        builder.add_node("eng_evaluate", eng_evaluate_node)
-        builder.add_node("eng_synthesize", eng_synthesize_node)
-        builder.add_node("eng_visual_gen", visual_generation_node)
-        builder.add_node("eng_answer", eng_answer_node)
-
-        # Entry Point
         builder.set_entry_point("router")
+        builder.add_conditional_edges("router", route_after_intent_router)
 
-        # Routing Conditional Edges
-        def route_after_intent(state: AxiomState):
-            if state.get("clarification", {}).get("clarification_needed", False):
-                return END
-            master = state.get("target_master", "PM.ai")
-            return "pm_reason" if master == "PM.ai" else "eng_reason"
+        # 2-7. SHARED COGNITIVE LOOP (Both PM.ai and ENG.ai use same nodes)
+        builder.add_node("reason", reason_node)
+        builder.add_node("memory", memory_retrieval_node)
+        builder.add_node("plan", plan_node)
+        builder.add_node("execute", execute_agent_node)
+        builder.add_node("observe", observe_evidence_node)
+        builder.add_node("evaluate", evaluate_node)
 
-        builder.add_conditional_edges("router", route_after_intent)
+        # 8-10. ADVANCED NODES (Shared)
+        builder.add_node("cross_handoff", cross_handoff_node)
+        builder.add_node("synthesize", synthesize_node)
+        builder.add_node("visual_gen", visual_gen_node)
+        builder.add_node("human_validate", human_validate_node)
 
-        # PM.ai Cognitive Loop Edges
-        builder.add_edge("pm_reason", "pm_memory_retrieval")
+        # ============================================================================
+        # EDGES: UNIFIED FLOW FOR BOTH MASTERS
+        # ============================================================================
 
-        def route_after_pm_memory(state: AxiomState):
-            # If evidence found in memory, skip specialized agents and go straight to evaluate
-            return "pm_evaluate" if state.get("memory_hit", False) else "pm_plan"
+        # REASON → MEMORY
+        builder.add_edge("reason", "memory")
 
-        builder.add_conditional_edges("pm_memory_retrieval", route_after_pm_memory)
-        builder.add_edge("pm_plan", "pm_validate")
-        builder.add_edge("pm_validate", "pm_execute_agent")
-        builder.add_edge("pm_execute_agent", "pm_observe")
-        builder.add_edge("pm_observe", "pm_evaluate")
+        # MEMORY: Hit → EVALUATE, Miss → PLAN
+        builder.add_conditional_edges("memory", route_after_memory)
 
-        def route_after_pm_evaluate(state: AxiomState):
-            # If not enough evidence and under 2 iterations, loop back to REASON
-            if not state.get("evaluation_passed", True) and state.get("evaluation_iteration_count", 0) < 2:
-                return "pm_reason"
-            return "pm_synthesize"
+        # PLAN → EXECUTE → OBSERVE → EVALUATE (Core loop)
+        builder.add_edge("plan", "execute")
+        builder.add_edge("execute", "observe")
+        builder.add_edge("observe", "evaluate")
 
-        builder.add_conditional_edges("pm_evaluate", route_after_pm_evaluate)
-        builder.add_edge("pm_synthesize", "pm_visual_gen")
-        builder.add_edge("pm_visual_gen", "pm_answer")
-        builder.add_edge("pm_answer", END)
+        # EVALUATE: Loop back to PLAN if insufficient (max 5), else continue
+        builder.add_conditional_edges("evaluate", route_after_evaluate)
 
-        # ENG.ai Cognitive Loop Edges
-        builder.add_edge("eng_reason", "eng_memory_retrieval")
+        # CROSS_HANDOFF → SYNTHESIZE
+        builder.add_edge("cross_handoff", "synthesize")
 
-        def route_after_eng_memory(state: AxiomState):
-            return "eng_evaluate" if state.get("memory_hit", False) else "eng_plan"
+        # SYNTHESIZE → VISUAL_GEN (conditional based on response_mode)
+        builder.add_conditional_edges("synthesize", route_after_synthesize)
 
-        builder.add_conditional_edges("eng_memory_retrieval", route_after_eng_memory)
-        builder.add_edge("eng_plan", "eng_validate")
-        builder.add_edge("eng_validate", "eng_execute_agent")
-        builder.add_edge("eng_execute_agent", "eng_observe")
-        builder.add_edge("eng_observe", "eng_evaluate")
+        # VISUAL_GEN → HUMAN_VALIDATE
+        builder.add_edge("visual_gen", "human_validate")
 
-        def route_after_eng_evaluate(state: AxiomState):
-            if not state.get("evaluation_passed", True) and state.get("evaluation_iteration_count", 0) < 2:
-                return "eng_reason"
-            return "eng_synthesize"
+        # HUMAN_VALIDATE → END or loop (APPROVED/REJECTED/REQUEST_MORE)
+        builder.add_conditional_edges("human_validate", route_after_hitl)
 
-        builder.add_conditional_edges("eng_evaluate", route_after_eng_evaluate)
-        builder.add_edge("eng_synthesize", "eng_visual_gen")
-        builder.add_edge("eng_visual_gen", "eng_answer")
-        builder.add_edge("eng_answer", END)
-
+        logger.info("AXIOM 9-node unified LangGraph compiled. Both PM.ai and ENG.ai share nodes.")
         return builder.compile()
+
     except ImportError:
-        logger.debug("langgraph package not installed; using native AxiomCognitiveRunner.")
+        logger.debug("langgraph not installed; using native AxiomCognitiveRunner instead.")
         return None
 
 
 class AxiomCognitiveRunner:
     """
-    High-performance native Cognitive Runner executing the exact StateGraph transitions.
-    Guarantees immediate zero-dependency execution.
+    High-performance native 9-node Cognitive Runner without LangGraph dependency.
+    Executes the exact 9-node state transitions: REASON → PLAN → EXECUTE → OBSERVE → EVALUATE
+    → CROSS_HANDOFF → SYNTHESIZE → VISUAL_GEN → HUMAN_VALIDATE
+
+    Zero-dependency, immediate execution for standalone AXIOM deployments.
     """
 
     def run(self, query: str, session_id: str = "demo_session", user_id: str = "demo_user") -> AxiomState:
+        """
+        Execute full 9-node AXIOM orchestration without LangGraph.
+
+        Returns: Final state with response ready for Streamlit/output layer.
+        """
         state: AxiomState = {
             "query": query,
             "session_id": session_id,
             "user_id": user_id,
             "evidence_envelopes": [],
             "evaluation_iteration_count": 0,
-            "guardrail_messages": []
+            "hitl_loop_count": 0,
+            "guardrail_messages": [],
+            "material_gaps": []
         }
 
-        # Step 1: Top-level Router Node
+        logger.info(f"AxiomCognitiveRunner.run(query={query[:50]}..., session={session_id})")
+
+        # ============================================================================
+        # STEP 1: TOP-LEVEL ROUTER NODE
+        # ============================================================================
         state = router_node(state)
         if state.get("clarification", {}).get("clarification_needed", False):
-            logger.info("Router returned clarification_needed=True. Ending run cleanly.")
+            logger.info("Router: Clarification needed. Ending gracefully.")
             return state
 
-        master = state.get("target_master", "PM.ai")
+        master = state.get("target_master", "AXIOM-PM")
+        logger.info(f"Router: Routing to {master}")
 
-        if master == "PM.ai":
-            # PM.ai Master Cognitive Graph
-            while True:
-                state = pm_reason_node(state)
-                state = pm_memory_retrieval_node(state)
+        # ============================================================================
+        # STEP 2: UNIFIED MASTER COGNITIVE LOOP (9-NODE ARCHITECTURE)
+        # Both PM.ai and ENG.ai use the same nodes, parameterized by target_master
+        # ============================================================================
+        state = self._run_unified_master_loop(state)
 
-                if state.get("memory_hit", False):
-                    state = pm_evaluate_node(state)
-                else:
-                    state = pm_plan_select_skill_node(state)
-                    state = pm_validate_node(state)
-                    state = pm_execute_agent_node(state)
-                    state = pm_observe_evidence_node(state)
-                    state = pm_evaluate_node(state)
+        logger.info(f"AxiomCognitiveRunner: Execution complete. Response mode: {state.get('response_mode', 'text_only')}")
+        return state
 
-                # Check loop condition
-                if not state.get("evaluation_passed", True) and state.get("evaluation_iteration_count", 0) < 2:
-                    logger.info("PM.ai: Evidence insufficient, looping back to REASON...")
-                    continue
-                break
+    def _run_unified_master_loop(self, state: AxiomState) -> AxiomState:
+        """
+        Execute unified 9-node cognitive loop for both PM.ai and ENG.ai.
+        Master-specific behavior is parameterized via state["target_master"].
 
-            state = pm_synthesize_node(state)
-            state = visual_generation_node(state)
-            state = pm_answer_node(state)
+        Nodes used:
+        1. REASON (master-specific via target_master parameter)
+        2. MEMORY (shared cache lookup)
+        3. PLAN (intelligent agent selection via LLM)
+        4. EXECUTE (agent delegation)
+        5. OBSERVE (evidence ingestion)
+        6. EVALUATE (sufficiency check)
+        7. CROSS_HANDOFF (optional master-to-master)
+        8. SYNTHESIZE (LLM synthesis)
+        9. VISUAL_GEN (conditional image generation)
+        10. HUMAN_VALIDATE (HITL checkpoint)
+        """
+        master = state.get("target_master", "AXIOM-PM")
+        logger.info(f"=== {master} UNIFIED COGNITIVE LOOP START ===")
 
-        elif master == "ENG.ai":
-            # ENG.ai Master Cognitive Graph
-            while True:
-                state = eng_reason_node(state)
-                state = eng_memory_retrieval_node(state)
+        # EVIDENCE COLLECTION LOOP (REASON → PLAN → EXECUTE → OBSERVE → EVALUATE)
+        while True:
+            # NODE 1: REASON (classifies intent, sets required_evidence_dimensions based on master)
+            state = reason_node(state)
+            state["current_step"] = "REASON"
+            logger.info(f"{master}: REASON complete. Required evidence: {state.get('required_evidence_dimensions', [])}")
 
-                if state.get("memory_hit", False):
-                    state = eng_evaluate_node(state)
-                else:
-                    state = eng_plan_select_skill_node(state)
-                    state = eng_validate_node(state)
-                    state = eng_execute_agent_node(state)
-                    state = eng_observe_evidence_node(state)
-                    state = eng_evaluate_node(state)
+            # NODE 2: MEMORY RETRIEVAL (checks Firestore cache)
+            state = memory_retrieval_node(state)
+            if state.get("memory_hit"):
+                logger.info(f"{master}: MEMORY cache hit. Skipping agent call.")
+                state = evaluate_node(state)
+            else:
+                # NODE 3: PLAN (intelligent LLM-driven agent selection)
+                state = plan_node(state)
+                state["current_step"] = "PLAN"
+                logger.info(f"{master}: PLAN selected agent: {state.get('delegated_agent')}")
 
-                if not state.get("evaluation_passed", True) and state.get("evaluation_iteration_count", 0) < 2:
-                    logger.info("ENG.ai: Evidence insufficient, looping back to REASON...")
-                    continue
-                break
+                # NODE 4: EXECUTE (call selected specialized agent)
+                state = execute_agent_node(state)
+                state["current_step"] = "EXECUTE"
+                logger.info(f"{master}: EXECUTE complete. Evidence collected: {len(state.get('evidence_envelopes', []))} envelopes")
 
-            state = eng_synthesize_node(state)
-            state = visual_generation_node(state)
-            state = eng_answer_node(state)
+                # NODE 5: OBSERVE (normalize and cache evidence)
+                state = observe_evidence_node(state)
+                state["current_step"] = "OBSERVE"
 
+                # NODE 6: EVALUATE (check if evidence is sufficient)
+                state = evaluate_node(state)
+                state["current_step"] = "EVALUATE"
+                logger.info(f"{master}: EVALUATE: sufficiency={state.get('evidence_sufficiency')}, iteration={state.get('evaluation_iteration_count')}")
+
+            # Check loop condition: If insufficient evidence and under 5 iterations, loop back to PLAN
+            if (state.get("evidence_sufficiency") != "SUFFICIENT" and
+                state.get("evaluation_iteration_count", 0) < 5):
+                logger.info(f"{master}: Evidence INSUFFICIENT. Gaps: {state.get('material_gaps', [])}. Looping back to PLAN (iteration {state.get('evaluation_iteration_count')})")
+                continue
+            break
+
+        logger.info(f"{master}: Evidence collection complete. Sufficiency: {state.get('evidence_sufficiency')}")
+
+        # NODE 7: CROSS_HANDOFF (Conditional: only if this master needs other master's expertise)
+        if state.get("cross_handoff_needed"):
+            state = cross_handoff_node(state)
+            state["current_step"] = "CROSS_HANDOFF"
+            logger.info(f"{master}: CROSS_HANDOFF completed. Response received from {state.get('target_master')}")
+
+        # NODE 8: SYNTHESIZE (LLM consolidates all evidence into structured answer + determines response_mode)
+        state = synthesize_node(state)
+        state["current_step"] = "SYNTHESIZE"
+        logger.info(f"{master}: SYNTHESIZE complete. Response mode: {state.get('response_mode')}")
+
+        # NODE 9 (Conditional): VISUAL_GEN (Generate images if response_mode requires it)
+        if state.get("response_mode") in ("text_and_image", "image_only"):
+            state = visual_gen_node(state)
+            state["current_step"] = "VISUAL_GEN"
+            logger.info(f"{master}: VISUAL_GEN complete. Image generated.")
+        else:
+            logger.info(f"{master}: Skipping VISUAL_GEN (response_mode: {state.get('response_mode')})")
+
+        # NODE 10: HUMAN_VALIDATE (HITL Checkpoint - interrupt for human review)
+        state = human_validate_node(state)
+        state["current_step"] = "HUMAN_VALIDATE"
+        logger.info(f"{master}: HUMAN_VALIDATE checkpoint. Awaiting human decision...")
+
+        # Handle HITL feedback (approve/reject/request more)
+        result = state.get("human_validation_result", "APPROVED")
+        if result == "REJECTED":
+            logger.info(f"{master}: Human REJECTED response. Looping back to REASON with feedback.")
+            return self._run_unified_master_loop(state)
+        elif result == "REQUEST_MORE" and state.get("hitl_loop_count", 0) < 2:
+            logger.info(f"{master}: Human REQUEST_MORE. Looping back to PLAN for another agent call.")
+            state["hitl_loop_count"] = state.get("hitl_loop_count", 0) + 1
+            return self._run_unified_master_loop(state)
+
+        logger.info(f"=== {master} UNIFIED COGNITIVE LOOP END (result: {result}) ===")
         return state
 
 

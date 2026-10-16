@@ -5,7 +5,7 @@ Architecture: Authentic LangChain ReAct Loop + LLM (Gemini / Vertex AI) + Tools:
 2. `impact_analysis_tool`: Evaluates dependency graph, downstream blast radius, and vector search on defects.
 
 Exclusively handles Neo4j Knowledge Graph queries (Graph Traversal, Vector Search, and Entity Details).
-Produces structured EvidenceEnvelopes and strict JSON contract outputs for PM.ai and ENG.ai Masters.
+Produces structured EvidenceEnvelopes and strict JSON contract outputs for AXIOM-PM and AXIOM-ENG Masters.
 """
 
 import os
