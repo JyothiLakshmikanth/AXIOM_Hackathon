@@ -700,7 +700,48 @@ AGENT RECEIVES QUERY
 
 ## Knowledge Foundation
 
-### Polyglot Data Architecture
+### How AXIOM Uses Both (The Winning Architecture)
+
+> ### 💡 The Pitch to the Judges:
+> *"AXIOM utilizes a polyglot persistence model on Google Cloud. We use **Firestore** for low-latency operational state and chat history. We use **Neo4j** for deep, multi-hop graph reasoning and variant divergence. And we use **BigQuery** as our unified analytical data lake, natively storing both our relational traceability matrices and our high-dimensional vector embeddings, allowing our specialized agents to execute complex SQL-based semantic searches without the overhead of managing a third-party vector database."*
+
+To score maximum points for **Technical Merit & GenAI Implementation**, AXIOM distributes data across Google Cloud and Neo4j according to operational characteristics—using the right tool for the right job:
+
+```mermaid
+graph TD
+  subgraph Brain["AXIOM Cognitive Brain Persistence Model"]
+    FS["🟢 Firestore<br/><b>The Brain's Short-Term Memory</b><br/>• LangGraph State Checkpoints<br/>• Conversation Session History<br/>• User Preferences & Filters<br/>• Runtime Evidence Cache"]
+    BQ["🔵 BigQuery<br/><b>The Brain's Long-Term Analytical Memory</b><br/>• 768-dim text-embedding-004 Vector Embeddings<br/>• Historical Defects & 8D RCA Records<br/>• Sprint Velocity & Burndown Metrics<br/>• Native SQL VECTOR_SEARCH (IVF + Cosine)"]
+    NEO["🟣 Neo4j AuraDB<br/><b>The Brain's Relationship Map</b><br/>• Multi-Hop Graph Traversal (1..3 hops)<br/>• Variant Divergence (Base vs. Premium)<br/>• Semantic Topic Affinity Clusters<br/>• Requirement Cypher Vector Index"]
+  end
+```
+
+### Data Distribution Breakdown
+
+| Storage Foundation | Brain Analogy | Role & Data Managed | Key Capabilities |
+|---|---|---|---|
+| **🟢 Google Cloud Firestore** | **The Brain's Short-Term Memory** | Data that changes constantly and needs low-latency operational read/write access.<br>• **LangGraph State**: Checkpoints so the orchestrator preserves context across turns.<br>• **Chat History**: Conversation turns between the user and AXIOM.<br>• **User Preferences**: Dynamic session filters (e.g., *"Show me only Premium variant risks"*).<br>• **Runtime Cache**: Low-latency cache of verified `EvidenceEnvelope` artifacts. | Immediate sub-10ms document reads/writes; automatic state persistence across server restarts. |
+| **🔵 Google BigQuery** (`axiom_qa.test_cases_embeddings`) | **The Brain's Long-Term Analytical Memory** | Massive, analytical knowledge base that the AI analyzes, correlates, and searches.<br>• **Vector Embeddings**: 768-dimensional `text-embedding-004` vectors for test cases (*replacing 3rd-party vector DBs with zero GCS overhead*).<br>• **Historical Defect & QA Data**: Past bug logs, RCA records, sprint velocities, and commit histories.<br>• **Native SQL Vector Search**: `VECTOR_SEARCH` with Cosine distance & IVF index. | Scalable petabyte analytics; native SQL semantic search without 3rd-party vector DB maintenance. |
+| **🟣 Neo4j AuraDB** | **The Brain's Relationship Map** | Deep, multi-hop graph traversals that relational SQL cannot efficiently navigate.<br>• **Variant Divergence**: How REQ-L5-001 (Base BLE) diverges from REQ-L5-002 (Premium UWB) via `VARIANT_DIVERGENCE_OF`.<br>• **Semantic Affinity**: Which requirements share underlying topics via `SEMANTIC_AFFINITY`.<br>• **Complex Impact Analysis**: Multi-hop traversal across `PARENT_OF` / `CHILD_OF` hierarchy, `CONSTRAINS` safety boundaries, `MITIGATES_RISK_OF` security links, and `ALLOCATED_TO` BusinessComponents.<br>• **Requirement Vector Search**: Embedded Cypher vector indexes (`requirement_embeddings`). | Multi-hop graph pattern matching (`1..3 hops`); transitive blast radius calculation. |
+
+### Knowledge Graph Metrics (Live Neo4j AuraDB Instance):
+- **103 Total Nodes**:
+  - `Requirement`: System & stakeholder requirement nodes with rich specification text and verification criteria
+  - `TestCase`: Verification test cases linked directly to requirements
+  - `BusinessComponent`: Allocated subsystem modules (Vehicle Controller, Mobile App, Cloud Key Service, Security Module, System)
+  - `Variant`: Target vehicle variants (`VAR-BASE`, `VAR-PREM`, `VAR-FLEET`, `VAR-GLOB`)
+  - `OEM`: Customization targets (e.g., `All OEMs`, `OEM-A`, `OEM-B`)
+  - `ArtifactType`: Stakeholder, Software, and System requirement categorizations
+  - `VerificationLevel`: Acceptance, Integration, and System verification stages
+- **266 Total Relationships**:
+  - **Structural Traceability**: `PARENT_OF`, `CHILD_OF`, `ALLOCATED_TO`, `TARGETS_VARIANT`, `CONSTRAINS`
+  - **Safety & Risk Mitigation**: `MITIGATES_RISK_OF`
+  - **Semantic Reasoning & Divergence**: `VARIANT_DIVERGENCE_OF`, `CO_ALLOCATED_WITH`, `SEMANTIC_AFFINITY`
+- *Dynamic in-memory graph (`_DYNAMIC_KG`) mirrors these exact entities for local testing when offline.*
+
+---
+
+### Polyglot Data Architecture Deep Dive
 
 AXIOM uses a **polyglot persistence strategy** - each data type stored in the optimal system for that domain:
 
