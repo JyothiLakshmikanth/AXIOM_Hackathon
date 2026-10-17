@@ -59,6 +59,7 @@ class AxiomState(TypedDict, total=False):
     target_master: Optional[str]  # "AXIOM-PM" or "AXIOM-ENG"
     target_capability: Optional[str]
     confidence_score: float
+    system_prompt_router: str  # ← loaded from router JSON/prompt at router_node init
 
     # Cognitive Master State
     current_step: str

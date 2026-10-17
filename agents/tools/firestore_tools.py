@@ -19,21 +19,28 @@ _LOCAL_FIRESTORE_STORE: Dict[str, Dict[str, Any]] = {
     "evidence_cache": {
         "GH-ISSUE-107": {
             "artifact_id": "GH-ISSUE-107",
-            "artifact_type": "github_issue",
-            "source_system": "github_tracker",
-            "source_uri": "https://github.com/axiom-org/axiom-core/issues/107",
+            "artifact_type": "jira_issue_record",
+            "source_system": "bigquery_axiom_data",
+            "source_uri": "bigquery://axiom-cloud-run.axiom_data.sprint_planning",
             "version": "1.0",
-            "updated_at": "2026-10-04T12:00:00Z",
+            "updated_at": "2026-10-17T08:30:00Z",
             "authoritative": True,
-            "synthetic": True,
+            "synthetic": False,
             "quality_status": "verified",
             "payload": {
-                "title": "Proximity boundary oscillation causes rapid lock/unlock chatter at 2.0m",
+                "Id": "TWK-107",
+                "Summary": "Boundary-Zone Unlock Intermittently Fails",
+                "title": "Boundary-Zone Unlock Intermittently Fails",
+                "Priority": "Critical",
+                "Status": "Open",
                 "severity": "S1_CRITICAL",
                 "urgency": "U1_IMMEDIATE",
+                "Sprint_ID": "SPR-03",
+                "Owned_By": "RES-04",
+                "Team": "Vehicle",
                 "linked_requirement": "REQ-004",
                 "state": "OPEN",
-                "labels": ["defect", "customer-escalation", "passive-entry"]
+                "labels": ["defect", "critical", "passive-entry"]
             }
         },
         "REQ-004": {

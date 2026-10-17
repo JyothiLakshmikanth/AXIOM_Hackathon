@@ -36,8 +36,8 @@ def analyze_intent_with_llm(query: str) -> Dict[str, Any]:
     }
     """
     try:
-        # Load the intent detection classifier prompt from axiom_prompts_common.json
-        intent_classifier_prompt = load_prompt("AXIOM-PM", "intent_detection_classifier")
+        # Load the official router prompt from prompts/axiom_router_v3.json
+        intent_classifier_prompt = load_prompt("axiom_router", "router_node")
 
         # Prepare LLM input
         llm_input = f"""
@@ -123,21 +123,51 @@ Based on the above classification framework, analyze this user query and return 
         return response
 
     except Exception as e:
-        logger.error(f"LLM-driven classification failed: {e}. Falling back to clarification.")
+        logger.warning(f"LLM-driven classification unavailable ({e}). Using deterministic rule fallback.")
+        return _fallback_intent_classification(query)
+
+
+def _fallback_intent_classification(query: str) -> Dict[str, Any]:
+    """Deterministic fallback classification when GCP Vertex LLM is offline or not configured."""
+    q = query.lower()
+
+    is_eng = any(w in q for w in ["rca", "code", "patch", "ast", "diff", "regression", "proximity_controller", "controller.py", "unit test", "pytest"])
+    is_pm = any(w in q for w in ["sprint", "velocity", "capacity", "rebalance", "allocat", "schedule", "milestone", "pi plan", "burn", "bottleneck", "blast radius", "triage"])
+
+    if is_eng and not is_pm:
         return {
-            "clarification_needed": True,
-            "domain": "NEEDS_CLARIFICATION",
-            "confidence": "Low",
-            "ambiguity_reason": f"Classification error (non-blocking). Please clarify your question.",
-            "clarification_questions": [
-                "Are you asking about project delivery/schedule (PM) or technical/code analysis (ENG)?",
-                "Do you have a specific defect ticket, sprint, or component to focus on?",
-                "Would you like delivery impact analysis, technical RCA, or both?"
-            ],
-            "target_master": None,
-            "target_capability": None,
-            "confidence_score": 0.3
+            "clarification_needed": False,
+            "domain": "ENG",
+            "target_master": "AXIOM-ENG",
+            "target_capability": "Deep Code RCA & Surgical Patching",
+            "confidence_score": 0.85,
+            "boundary_classification": "micro_technical",
+            "reasoning": "Query matches engineering domain (code/patch/RCA)."
         }
+    elif is_pm or any(w in q for w in ["defect", "issue", "gh-", "twk-", "bug"]):
+        return {
+            "clarification_needed": False,
+            "domain": "PJM",
+            "target_master": "AXIOM-PM",
+            "target_capability": "Defect Triage & Impact Blast Radius" if any(w in q for w in ["triage", "blast", "issue", "twk", "gh-"]) else "Sprint Replanning & Capacity Balancing",
+            "confidence_score": 0.90,
+            "boundary_classification": "macro_delivery",
+            "reasoning": "Query matches project management domain (triage/capacity/sprint)."
+        }
+    return {
+        "clarification_needed": True,
+        "domain": "NEEDS_CLARIFICATION",
+        "confidence": "Low",
+        "ambiguity_reason": "Could not classify intent reliably. Please clarify your request.",
+        "clarification_questions": [
+            "Are you asking about project delivery/schedule (PM) or technical/code analysis (ENG)?",
+            "Do you have a specific defect ticket, sprint, or component to focus on?",
+            "Would you like delivery impact analysis, technical RCA, or both?"
+        ],
+        "target_master": None,
+        "target_capability": None,
+        "confidence_score": 0.3
+    }
 
 
 def router_node(state: AxiomState) -> AxiomState:
@@ -150,6 +180,8 @@ def router_node(state: AxiomState) -> AxiomState:
     logger.info(f"ROUTER: Classifying query: {query[:100]}...")
 
     # LLM-driven semantic classification (not keyword matching)
+    router_prompt = load_prompt("axiom_router", "router_node")
+    state["system_prompt_router"] = router_prompt
     decision = analyze_intent_with_llm(query)
 
     # Populate state

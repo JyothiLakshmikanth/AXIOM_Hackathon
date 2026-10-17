@@ -64,8 +64,9 @@ def _pi_text(row) -> str:
 
 
 def _capacity_text(row) -> str:
+    res_id = row.get("Default_Assignee_ID", row.get("Resource_ID", ""))
     return (
-        f"Associate: {row['Associate']} ({row['Resource_ID']}). "
+        f"Associate: {row['Associate']} ({res_id}). "
         f"Role: {row['Role']}. "
         f"Domain: {row['Domain']}. "
         f"Location: {row['Location']}. "

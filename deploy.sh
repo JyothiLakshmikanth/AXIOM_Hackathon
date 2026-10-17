@@ -234,7 +234,7 @@ verify_deployment() {
     log_info "Testing health endpoint..."
     sleep 10  # Wait for service to be ready
 
-    if curl -s -f -H "Authorization: Bearer $(gcloud auth print-identity-token)" "$SERVICE_URL/health" > /dev/null; then
+    if curl -s -f -H "Authorization: Bearer $(gcloud auth print-identity-token)" "$SERVICE_URL/_stcore/health" > /dev/null || curl -s -f -H "Authorization: Bearer $(gcloud auth print-identity-token)" "$SERVICE_URL/health" > /dev/null; then
         log_success "Health check passed"
     else
         log_warn "Health check failed (service may still be warming up)"

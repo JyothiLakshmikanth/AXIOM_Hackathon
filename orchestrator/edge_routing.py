@@ -7,7 +7,10 @@ Supports both AXIOM-PM and AXIOM-ENG master cognitive loops with unified routing
 """
 
 import logging
-from langgraph.graph import END
+try:
+    from langgraph.graph import END
+except ImportError:
+    END = "__end__"
 
 from orchestrator.state import AxiomState
 
