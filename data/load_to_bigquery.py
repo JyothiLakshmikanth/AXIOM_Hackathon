@@ -172,7 +172,15 @@ def load_csv_to_bq(
         autodetect=True,
     )
 
-    job = client.load_table_from_dataframe(df, table_ref, job_config=job_config)
+    try:
+        job = client.load_table_from_dataframe(df, table_ref, job_config=job_config)
+    except Exception as exc:
+        if "pyarrow" in str(exc).lower():
+            log.info("  pyarrow not installed, using load_table_from_json fallback...")
+            records = df.where(pd.notnull(df), None).to_dict(orient="records")
+            job = client.load_table_from_json(records, table_ref, job_config=job_config)
+        else:
+            raise exc
     job.result()  # wait
 
     table = client.get_table(table_ref)

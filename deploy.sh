@@ -203,7 +203,7 @@ deploy_to_cloud_run() {
         --timeout "$TIMEOUT" \
         --max-instances "$MAX_INSTANCES" \
         --min-instances "$MIN_INSTANCES" \
-        --no-allow-unauthenticated \
+        --allow-unauthenticated \
         --set-env-vars "ENVIRONMENT=$ENVIRONMENT,GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
         --service-account "axiom-orchestrator@$PROJECT_ID.iam.gserviceaccount.com" \
         --labels "service=axiom,environment=$ENVIRONMENT,managed-by=deploy-script" \
@@ -303,9 +303,9 @@ setup_bigquery() {
     DATASETS=("axiom_data" "axiom_cache" "axiom_logs")
 
     for dataset in "${DATASETS[@]}"; do
-        if ! bq ls -d "$dataset" &> /dev/null; then
+        if ! bq show "$PROJECT_ID:$dataset" &> /dev/null; then
             log_info "Creating BigQuery dataset: $dataset"
-            bq mk --dataset "$PROJECT_ID:$dataset"
+            bq mk --dataset "$PROJECT_ID:$dataset" || true
         else
             log_info "BigQuery dataset already exists: $dataset"
         fi

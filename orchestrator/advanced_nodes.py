@@ -78,14 +78,44 @@ def load_prompt(master_name: str, prompt_key: str) -> str:
 def init_gemini_client() -> Optional[Any]:
     """
     Initialize Google Gemini/Vertex AI LLM client.
-    Attempts Vertex AI first, falls back to Gemini API.
+    First attempts native GCPClient (vertexai.generative_models) without LangChain pydantic conflicts,
+    then falls back to ChatVertexAI / ChatGoogleGenerativeAI.
 
     Returns:
-        LLM client object (ChatVertexAI or ChatGoogleGenerativeAI) or None if both unavailable.
+        LLM client object or None if unavailable.
     """
+    # 1. Try native GCPClient
+    try:
+        from orchestrator.gcp_client import get_gcp_client
+        client = get_gcp_client()
+        if client:
+            class DirectGeminiSynthesizerLLM:
+                def __init__(self, gcp):
+                    self.gcp = gcp
+                def invoke(self, messages):
+                    class ContentObj:
+                        def __init__(self, text):
+                            self.content = text
+                    prompt_text = ""
+                    if isinstance(messages, list) and messages:
+                        m = messages[0]
+                        prompt_text = m.content if hasattr(m, "content") else str(m)
+                    else:
+                        prompt_text = str(messages)
+                    raw = self.gcp.call_gemini(
+                        system_prompt="You are the authoritative AXIOM Master Synthesizer. Synthesize multi-agent evidence into a structured JSON answer.",
+                        user_input=prompt_text,
+                        temperature=0.2
+                    )
+                    return ContentObj(raw)
+            logger.debug("Synthesizer using native GCPClient Vertex AI")
+            return DirectGeminiSynthesizerLLM(client)
+    except Exception as e:
+        logger.debug(f"Direct GCPClient synthesizer init skipped: {e}")
+
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("VERTEX_AI_GEMINI_MODEL", "gemini-1.5-pro")
+    model_name = os.getenv("VERTEX_AI_GEMINI_MODEL", "gemini-2.5-pro")
 
     if project_id:
         try:
@@ -275,6 +305,17 @@ def synthesize_node(state: AxiomState) -> AxiomState:
         env.get("payload", {}) for env in state.get("evidence_envelopes", [])
     ]
 
+    # Retrieve learned positive exemplars from user feedback memory
+    exemplars = []
+    exemplar_guidance = ""
+    try:
+        from agents.tools.firestore_tools import firestore_get_positive_exemplars
+        exemplars = firestore_get_positive_exemplars(limit=2, query_filter=state.get("query", ""))
+        if exemplars:
+            logger.info(f"SYNTHESIZE: Injected {len(exemplars)} user-approved exemplars for few-shot guided synthesis")
+    except Exception as e:
+        logger.debug(f"Exemplar retrieval failed: {e}")
+
     synthesis_input = {
         "query": state.get("query", ""),
         "hypothesis": state.get("reasoning_hypothesis", ""),
@@ -283,6 +324,21 @@ def synthesize_node(state: AxiomState) -> AxiomState:
         "target_capability": state.get("target_capability", ""),
         "confidence_score": state.get("confidence_score", 0.5),
     }
+
+    if exemplars:
+        synthesis_input["user_approved_exemplars_from_past_feedback"] = [
+            {
+                "query": ex.get("query"),
+                "approved_answer_sample": ex.get("response", "")[:350],
+                "critique": ex.get("comment", "User marked this response as authoritative and clear.")
+            }
+            for ex in exemplars
+        ]
+        exemplar_guidance = (
+            "\n\n### USER FEEDBACK PREFERENCE GUIDANCE:\n"
+            "The user previously gave thumbs-up ratings to the answer structures in 'user_approved_exemplars_from_past_feedback'. "
+            "Please follow their standard of concise executive summaries, quantitative tables, and prioritized next steps."
+        )
 
     logger.debug(f"SYNTHESIZE: Input prepared. Evidence count={synthesis_input['evidence_count']}")
 
@@ -294,7 +350,8 @@ def synthesize_node(state: AxiomState) -> AxiomState:
             # Use LangChain LLM interface
             from langchain_core.messages import HumanMessage
 
-            synthesis_message = HumanMessage(content=f"{synthesize_prompt}\n\nContext: {json.dumps(synthesis_input, indent=2)}")
+            prompt_content = f"{synthesize_prompt}{exemplar_guidance}\n\nContext: {json.dumps(synthesis_input, indent=2)}"
+            synthesis_message = HumanMessage(content=prompt_content)
             response = llm.invoke([synthesis_message])
             synthesized_response = response.content
         else:

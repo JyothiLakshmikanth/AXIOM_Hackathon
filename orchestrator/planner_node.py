@@ -43,18 +43,38 @@ def load_json_file(rel_path: str) -> Dict[str, Any]:
 def _initialize_llm_client():
     """
     Initialize Gemini/Vertex AI LLM client.
-
-    Returns:
-        Initialized LLM client, or None if unavailable
-
-    Raises:
-        ImportError: If Vertex AI dependencies are not installed
+    First tries native GCPClient (vertexai.generative_models), with ChatVertexAI fallback.
+    Safely catches all exceptions (including pydantic ConfigError) without failing.
     """
+    # 1. Try native GCPClient (avoids LangChain Pydantic v1 validator issues)
+    try:
+        from orchestrator.gcp_client import get_gcp_client
+        client = get_gcp_client()
+        if client:
+            class DirectGeminiPlannerLLM:
+                def __init__(self, gcp):
+                    self.gcp = gcp
+                def invoke(self, prompt):
+                    class ContentObj:
+                        def __init__(self, text):
+                            self.content = text
+                    raw = self.gcp.call_gemini(
+                        system_prompt="You are an expert autonomous multi-agent planner for AXIOM. Return valid JSON only.",
+                        user_input=prompt,
+                        temperature=0.2
+                    )
+                    return ContentObj(raw)
+            logger.debug("Planner using native GCPClient Vertex AI")
+            return DirectGeminiPlannerLLM(client)
+    except Exception as e:
+        logger.debug(f"Direct GCPClient not initialized for planner: {e}")
+
+    # 2. Try ChatVertexAI with safe Exception handling
     try:
         from langchain_google_vertexai import ChatVertexAI
 
-        model_name = os.getenv("VERTEX_AI_GEMINI_MODEL", "gemini-2.0-flash-exp")
-        project_id = os.getenv("GCP_PROJECT_ID", None)
+        model_name = os.getenv("VERTEX_AI_GEMINI_MODEL", "gemini-2.5-pro")
+        project_id = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
 
         llm = ChatVertexAI(
             model_name=model_name,
@@ -64,10 +84,9 @@ def _initialize_llm_client():
         )
         logger.debug(f"LLM initialized: {model_name}")
         return llm
-    except ImportError:
+    except Exception as e:
         logger.warning(
-            "Vertex AI not available; planner will fall back to heuristic selection. "
-            "Install: pip install langchain-google-vertexai"
+            f"Vertex AI LLM unavailable for planner ({e}); planner will use heuristic selection."
         )
         return None
 
@@ -199,13 +218,17 @@ def _call_planner_llm(
         logger.debug(f"LLM planner response (raw): {response_text[:200]}...")
 
         # Parse JSON response
-        decision = json.loads(response_text)
+        import re
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            decision = json.loads(json_match.group())
+        else:
+            decision = json.loads(response_text)
         logger.info(f"Planner LLM selected agent: {decision.get('agent_id')}")
         return decision
 
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse LLM response as JSON: {e}")
-        logger.debug(f"Raw response: {response_text}")
+    except (json.JSONDecodeError, Exception) as e:
+        logger.error(f"Failed to parse LLM response as JSON ({e}), raw: {response_text[:200]}")
         return None
     except Exception as e:
         logger.error(f"LLM planner call failed: {e}")

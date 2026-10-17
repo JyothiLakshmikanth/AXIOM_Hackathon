@@ -59,12 +59,12 @@ class CodeFixAgent:
         evidences.append({
             "artifact_id": f"COMMIT-{commit_diff['commit_sha']}",
             "artifact_type": "git_commit_diff",
-            "source_system": "synthetic_git",
-            "source_uri": f"git://axiom-core/commits/{commit_diff['commit_sha']}",
+            "source_system": "github_ekey2w",
+            "source_uri": f"https://github.com/JyothiLakshmikanth/EKey2W/commit/{commit_diff['commit_sha']}",
             "version": "1.0",
             "updated_at": commit_diff["date"],
             "authoritative": True,
-            "synthetic": True,
+            "synthetic": False,
             "quality_status": "verified",
             "payload": commit_diff
         })
@@ -75,12 +75,12 @@ class CodeFixAgent:
         evidences.append({
             "artifact_id": f"AST-{file_path}",
             "artifact_type": "source_ast_inspection",
-            "source_system": "cloud_storage_src",
-            "source_uri": f"storage://axiom-src/{file_path}",
+            "source_system": "github_ekey2w",
+            "source_uri": f"https://github.com/JyothiLakshmikanth/EKey2W/blob/main/{file_path}",
             "version": "1.0",
             "updated_at": "2026-10-04T10:00:00Z",
             "authoritative": True,
-            "synthetic": True,
+            "synthetic": False,
             "quality_status": "verified",
             "payload": ast_result
         })
@@ -92,12 +92,12 @@ class CodeFixAgent:
         evidences.append({
             "artifact_id": f"PATCH-{file_path}",
             "artifact_type": "proposed_surgical_patch",
-            "source_system": "synthetic_git",
-            "source_uri": f"git://axiom-core/branches/{patch_data['target_branch']}",
+            "source_system": "github_ekey2w",
+            "source_uri": f"https://github.com/JyothiLakshmikanth/EKey2W/tree/{patch_data['target_branch']}",
             "version": "1.0",
             "updated_at": "2026-10-04T11:00:00Z",
             "authoritative": True,
-            "synthetic": True,
+            "synthetic": False,
             "quality_status": "verified",
             "payload": {**patch_data, **syntax_validation}
         })

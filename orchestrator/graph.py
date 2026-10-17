@@ -163,6 +163,25 @@ class AxiomCognitiveRunner:
         # STEP 1: TOP-LEVEL ROUTER NODE
         # ============================================================================
         state = router_node(state)
+        if state.get("is_direct_response"):
+            logger.info("Router: Handled query directly (greeting/help). Ending gracefully.")
+            try:
+                from agents.tools.firestore_tools import firestore_save_session_turn
+                firestore_save_session_turn(
+                    session_id=session_id,
+                    turn_data={
+                        "query": query,
+                        "target_master": "AXIOM-ROUTER",
+                        "content": state.get("final_output_markdown", ""),
+                        "summary": state.get("final_output_markdown", "")[:200],
+                        "visual": state.get("visual_artifact"),
+                        "evidences": state.get("evidence_envelopes", [])
+                    },
+                    user_id=user_id
+                )
+            except Exception as e:
+                logger.debug(f"Could not save router turn: {e}")
+            return state
         if state.get("clarification", {}).get("clarification_needed", False):
             logger.info("Router: Clarification needed. Ending gracefully.")
             return state
@@ -175,6 +194,24 @@ class AxiomCognitiveRunner:
         # Both PM.ai and ENG.ai use the same nodes, parameterized by target_master
         # ============================================================================
         state = self._run_unified_master_loop(state)
+
+        # Save session turn to memory
+        try:
+            from agents.tools.firestore_tools import firestore_save_session_turn
+            firestore_save_session_turn(
+                session_id=session_id,
+                turn_data={
+                    "query": query,
+                    "target_master": master,
+                    "content": state.get("final_output_markdown", ""),
+                    "summary": state.get("final_output_markdown", "")[:200],
+                    "visual": state.get("visual_artifact"),
+                    "evidences": state.get("evidence_envelopes", [])
+                },
+                user_id=user_id
+            )
+        except Exception as e:
+            logger.debug(f"Could not save master turn: {e}")
 
         logger.info(f"AxiomCognitiveRunner: Execution complete. Response mode: {state.get('response_mode', 'text_only')}")
         return state

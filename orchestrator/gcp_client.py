@@ -294,11 +294,12 @@ class GCPClient:
         Called on first use of call_gemini() to minimize startup overhead.
         """
         try:
-            logger.debug("Initializing Vertex AI Gemini model")
+            import os
             from vertexai.generative_models import GenerativeModel
 
-            self._gemini_model = GenerativeModel("gemini-2.0-flash-001")
-            logger.info("Vertex AI Gemini model initialized")
+            model_name = os.getenv("VERTEX_AI_GEMINI_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
+            self._gemini_model = GenerativeModel(model_name)
+            logger.info(f"Vertex AI Gemini model initialized: {model_name}")
 
         except ImportError as e:
             logger.error(f"Failed to import vertexai: {e}")

@@ -1,0 +1,16 @@
+[server]
+port = 8080
+address = "0.0.0.0"
+enableCORS = false
+enableXsrfProtection = false
+enableWebsocketCompression = false
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+backgroundColor = "#0a0d14"
+secondaryBackgroundColor = "#121926"
+textColor = "#f8fafc"

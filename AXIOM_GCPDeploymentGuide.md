@@ -4,11 +4,11 @@
 
 Deploy AXIOM to Google Cloud Platform using:
 
-- Cloud Run — FastAPI backend and later Streamlit frontend
+- Cloud Run — Unified Streamlit Platform (streamlit_app.py) hosting the Risk Cockpit & Multi-Agent Orchestrator
 - Artifact Registry — Docker images
 - Vertex AI / Gemini — LLM inference
 - Firestore — evidence/cache where required
-- BigQuery — application data/cache/log datasets where required
+- BigQuery — application structured data (axiom_data dataset: sprint, capacity, competency, PI planning)
 - Secret Manager — sensitive credentials
 - Cloud Logging — logs
 
@@ -166,29 +166,26 @@ Do not create another repository.
 
 ---
 
-# 6. Go to the deployment directory
+# 6. Go to the project root directory
 
-The project deployment files should include:
+All deployment files reside in the root repository directory:
 
 ```text
-deployment/
-    Dockerfile.new
-    deploy.sh
-    main.py
-    requirements.txt
-    cloudbuild.yaml
-    .dockerignore
+AXIOM_Hackathon/
+    Dockerfile          # Unified Streamlit + Orchestrator container
+    deploy.sh           # Automated Cloud Run deployment script
+    streamlit_app.py    # Main UI (Risk Cockpit, Multi-Agent Chat, BigQuery Hub)
+    requirements.txt    # Python dependencies
+    cloudbuild.yaml     # Cloud Build CI/CD pipeline
+    .dockerignore       # Build context exclusions
 ```
 
-Go to the project and deployment directory:
+Navigate to the project root:
 
 ```bash
-cd ~/AXIOM_Hackathon-main
-cd deployment
+cd ~/AXIOM_Hackathon
 ls
 ```
-
-If your project directory has a different name, use the actual directory.
 
 **Cost: $0**
 
@@ -196,29 +193,24 @@ If your project directory has a different name, use the actual directory.
 
 # 7. Verify the application entry point and Dockerfile
 
-There are multiple Dockerfiles in the project, so do not blindly build one.
-
-Inspect the intended Dockerfile:
+Inspect the Dockerfile:
 
 ```bash
-grep -n "FROM\|CMD\|ENTRYPOINT\|WORKERS" Dockerfile.new
+grep -n "FROM\|CMD\|ENTRYPOINT" Dockerfile
 ```
 
-Inspect the FastAPI application:
-
-```bash
-grep -n "FastAPI" main.py
+Expected output:
+```text
+2:FROM python:3.11-slim
+31:    CMD curl --fail http://localhost:${PORT}/_stcore/health || exit 1
+33:CMD ["sh", "-c", "exec streamlit run streamlit_app.py --server.port=${PORT:-8080} --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false --server.enableCORS=false --server.enableXsrfProtection=false"]
 ```
 
-Check health endpoints:
-
-```bash
-grep -n "health" main.py
+The application runs **Streamlit (`streamlit_app.py`)** directly on Cloud Run.
+The built-in health check endpoint is:
+```text
+/_stcore/health
 ```
-
-The current project documentation identifies `main.py` as the FastAPI entry point and `Dockerfile.new` as a deployment file.
-
-Do not assume `/health` or `/api/health` until the code confirms it.
 
 **Cost: $0**
 
@@ -252,10 +244,11 @@ Use Secret Manager for sensitive values.
 
 # 9. Create a dedicated Cloud Run service account
 
-Example:
+Create the service account:
 
 ```bash
-gcloud iam service-accounts create axiom-orchestrator   --display-name="AXIOM Orchestrator"
+gcloud iam service-accounts create axiom-orchestrator \
+    --display-name="AXIOM Orchestrator"
 ```
 
 Verify:
@@ -264,7 +257,32 @@ Verify:
 gcloud iam service-accounts list
 ```
 
-The application may require access to Vertex AI, BigQuery, Firestore and logging. Grant only the roles actually required.
+### Grant Required IAM Roles
+The service account needs access to Vertex AI (Gemini), BigQuery, and Cloud Logging:
+
+```bash
+PROJECT_ID="axiom-510516"
+SA_EMAIL="axiom-orchestrator@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# Vertex AI / Gemini access
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/aiplatform.user"
+
+# BigQuery data reader and job runner
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/bigquery.dataViewer"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/bigquery.jobUser"
+
+# Cloud Logging
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/logging.logWriter"
+```
 
 **Cost: $0**
 
@@ -308,31 +326,29 @@ Main usage drivers include reads, writes, deletes, storage and network usage.
 
 ---
 
-# 12. Configure BigQuery
+# 12. Configure BigQuery (Automated Data Loader)
 
-The deployment configuration expects:
+The application uses the `axiom_data` BigQuery dataset for structured project tracking:
+- `sprint_planning` (21 tasks, bugs, epics)
+- `capacity_planning` (team capacity & 85% ceiling allocations)
+- `competency_matrix` (64 skills across team members)
+- `pi_planning` (PI-1 to PI-4 roadmaps & milestones)
+- `test_cases` (Master ISO 29119 test store)
 
-```text
-axiom_data
-axiom_cache
-axiom_logs
+*(Note: Requirements data lives exclusively in the Neo4j Knowledge Graph and is not loaded into BigQuery).*
+
+### Automated Population:
+Run the loader script from the project root:
+
+```bash
+python data/load_to_bigquery.py --project axiom-510516
 ```
 
-Create them only if the application requires them.
+This creates the `axiom_data` dataset, generates BigQuery tables, and creates BigQuery ML text embeddings.
 
-BigQuery cost is driven mainly by storage and data processed by queries.
+*(If BigQuery is empty or still populating, `agents/tools/bigquery_tools.py` automatically falls back to local CSVs without failing).*
 
-Avoid unnecessary queries such as:
-
-```sql
-SELECT * FROM large_table;
-```
-
-when only a few columns/rows are needed.
-
-Prefer filtered queries, selected columns and caching where appropriate.
-
-**Cost: potentially billable.**
+**Cost: potentially billable storage and query charges.**
 
 ---
 
@@ -366,37 +382,40 @@ gcloud auth configure-docker us-central1-docker.pkg.dev
 
 # 15. Build the Docker image
 
-Use a versioned tag while debugging.
-
-Example:
+Use a versioned tag or `latest`:
 
 ```bash
-docker build   -f Dockerfile.new   --platform linux/amd64   -t us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v1   .
+docker build \
+    -f Dockerfile \
+    --platform linux/amd64 \
+    -t us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v1 \
+    .
 ```
 
-If the confirmed Dockerfile or build context differs, use the paths confirmed in Step 7.
-
 **Cost: generally $0 of GCP application credits when building in Cloud Shell/local Docker.**
-
-If the build fails, fix the code/Dockerfile and rebuild. Do not create another Artifact Registry repository.
 
 ---
 
 # 16. Test the container before Cloud Run
 
-Run:
+Run locally in Cloud Shell:
 
 ```bash
-docker run --rm   -p 8080:8080   us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v1
+docker run --rm \
+    -p 8080:8080 \
+    us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v1
 ```
 
-In another terminal, test the confirmed health endpoint. For example:
+In another terminal, test Streamlit's health endpoint:
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8080/_stcore/health
 ```
 
-Use the actual endpoint found in Step 7.
+Expected output:
+```text
+ok
+```
 
 **Cost: $0 of Cloud Run credits.**
 
@@ -412,47 +431,52 @@ docker push   us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v1
 
 ---
 
-# 18. Deploy the FastAPI backend to Cloud Run
+# 18. Deploy the Streamlit Platform to Cloud Run
 
 Start conservatively because the project has approximately $300 of credits.
 
 Recommended initial settings:
+- Region: `us-central1`
+- CPU: `2`
+- Memory: `2Gi`
+- Minimum instances: `0` (scales to zero when idle)
+- Maximum instances: `1`
 
-```text
-Region:          us-central1
-CPU:             1–2
-Memory:          2 GiB
-Minimum:         0
-Maximum:         1
-```
-
-Example:
+Deploy command:
 
 ```bash
-gcloud run deploy axiom-orchestrator-prod   --image=us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v1   --region=us-central1   --platform=managed   --memory=2Gi   --cpu=2   --min-instances=0   --max-instances=1   --port=8080
+gcloud run deploy axiom-orchestrator-prod \
+    --image=us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v1 \
+    --region=us-central1 \
+    --platform=managed \
+    --memory=2Gi \
+    --cpu=2 \
+    --min-instances=0 \
+    --max-instances=1 \
+    --allow-unauthenticated \
+    --port=8080 \
+    --service-account=axiom-orchestrator@axiom-510516.iam.gserviceaccount.com
 ```
-
-Add the confirmed service account, secrets and environment variables after checking their exact names.
 
 **Cost: YES — billable compute.**
 
-`min-instances=0` allows the service to scale down when unused. Keep `max-instances=1` initially to prevent unexpected scaling during development.
-
 ---
 
-# 19. Get the Cloud Run URL
+# 19. Get the Cloud Run URL & Test Health
 
 ```bash
-gcloud run services describe axiom-orchestrator-prod   --region=us-central1   --format="value(status.url)"
+gcloud run services describe axiom-orchestrator-prod \
+    --region=us-central1 \
+    --format="value(status.url)"
 ```
 
-Save the returned URL.
-
-Test the confirmed health endpoint:
+Save the returned URL. Open it in your web browser, or verify the health endpoint:
 
 ```bash
-curl https://YOUR-CLOUD-RUN-URL/health
+curl https://YOUR-CLOUD-RUN-URL/_stcore/health
 ```
+
+Expected response: `ok`
 
 **Cost: small Cloud Run usage.**
 
@@ -534,77 +558,39 @@ Do not increase the Cloud Run maximum until testing demonstrates that it is nece
 
 ---
 
-# 23. Deploy Streamlit after the backend works
+# 23. Unified Architecture & Automated Deployment
 
-Deploy the Streamlit frontend only after FastAPI is stable.
-
-Architecture:
-
+AXIOM uses a unified container architecture:
 ```text
-Browser
-   |
-   v
-Streamlit Cloud Run
-   |
-   | HTTPS
-   v
-FastAPI Cloud Run
-   |
-   v
-LangGraph
-   |
-   v
-AXIOM agents
+Browser (Executive PM / Engineer)
+   ↓ (HTTPS)
+Cloud Run [Streamlit Platform + Risk Cockpit]
+   ↓ (In-Memory Internal StateGraph)
+LangGraph (9-Node Cognitive Engine)
+   ↓
+AXIOM Masters (PM.ai + ENG.ai)
+   ↓
+Specialized Agents (Defect, Resource, Test, Security)
+   ↓
+Tools & Data (BigQuery axiom_data, Neo4j KG, Vertex AI Gemini)
 ```
 
-Initially use:
+There is **no need for a separate backend deployment** or `AXIOM_API_URL` configuration. The Streamlit container directly embeds the cognitive engine, protecting internal business logic from tampering while delivering responsive UI updates.
 
-```text
-min instances = 0
-max instances = 1
+### One-Command Deployment Alternative:
+You can also deploy in a single step using Cloud Build:
+
+```bash
+gcloud builds submit --config=cloudbuild.yaml \
+    --substitutions=_REGION=us-central1,_SERVICE_NAME=axiom-orchestrator,_ENVIRONMENT=prod
 ```
 
-**Cost: YES — additional Cloud Run usage.**
+Or using the automated shell script:
 
----
-
-# 24. Configure the Streamlit backend URL
-
-The Streamlit application should point to the deployed FastAPI URL, for example:
-
-```text
-AXIOM_API_URL=https://<fastapi-cloud-run-url>
+```bash
+chmod +x deploy.sh
+./deploy.sh prod us-central1
 ```
-
-Use environment variables/secrets rather than hard-coding credentials.
-
----
-
-# 25. End-to-end test
-
-Test:
-
-```text
-Browser
-  ↓
-Streamlit
-  ↓
-FastAPI
-  ↓
-LangGraph
-  ↓
-Master
-  ↓
-Specialized Agent
-  ↓
-Tools
-  ↓
-Gemini
-  ↓
-Firestore / BigQuery
-```
-
-Test one query at a time while monitoring logs and billing.
 
 ---
 
@@ -675,9 +661,13 @@ Deploy new tag to Cloud Run
 Example:
 
 ```bash
-docker build   -f Dockerfile.new   --platform linux/amd64   -t us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v2   .
+docker build \
+    -f Dockerfile \
+    --platform linux/amd64 \
+    -t us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v2 \
+    .
 
-docker push   us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v2
+docker push us-central1-docker.pkg.dev/axiom-510516/axiom/axiom:v2
 ```
 
 Then deploy `v2` to Cloud Run.
@@ -687,31 +677,19 @@ Then deploy `v2` to Cloud Run.
 # 28. Final deployment checklist
 
 ```text
-[ ] GCP project: axiom-510516
-[ ] Billing enabled
-[ ] Required APIs enabled
-[ ] Artifact Registry repository created
-[ ] Correct Dockerfile identified
-[ ] main.py verified
-[ ] requirements.txt verified
-[ ] Environment variables reviewed
-[ ] Service account created
-[ ] IAM permissions configured
-[ ] Vertex AI/Gemini configured
-[ ] Firestore configured if required
-[ ] BigQuery configured if required
-[ ] Secrets stored in Secret Manager
-[ ] Docker authentication configured
-[ ] Docker image built
-[ ] Container tested locally
-[ ] Image pushed to Artifact Registry
-[ ] FastAPI deployed to Cloud Run
-[ ] Health endpoint tested
-[ ] Cloud Run logs checked
-[ ] One AXIOM query tested
-[ ] Gemini usage checked
-[ ] Streamlit deployed
-[ ] End-to-end query tested
+[x] GCP project: axiom-510516
+[x] Billing enabled
+[x] Required APIs enabled
+[x] Artifact Registry repository created (axiom in us-central1)
+[x] Dockerfile verified (Streamlit + Risk Cockpit)
+[x] requirements.txt verified (streamlit>=1.30.0)
+[ ] Service account created (axiom-orchestrator)
+[ ] IAM permissions configured (Vertex AI, BigQuery, Logging)
+[ ] BigQuery populated (python data/load_to_bigquery.py)
+[ ] Docker image built & pushed
+[ ] Cloud Run deployed (axiom-orchestrator-prod)
+[ ] Health endpoint verified (/_stcore/health)
+[ ] Risk Cockpit & Multi-Agent query verified
 [ ] Budget alerts configured
 ```
 
@@ -724,19 +702,16 @@ GCP project          ✅
 Billing              ✅
 Authentication       ✅
 APIs                 ✅
-Artifact Registry    ⏳
-Docker build         ⏳
-Cloud Run            ⏳
-Gemini               ⏳
-Firestore            ⏳
-BigQuery             ⏳
-Streamlit            ⏳
+Artifact Registry    ✅
+Service Account      ⏳ (Next: Step 9)
+BigQuery Data        ⏳ (Next: Step 12)
+Docker build & push  ⏳ (Next: Step 15)
+Cloud Run            ⏳ (Next: Step 18)
 ```
 
-**Next action:**
+**Next action in Cloud Shell:**
 
 ```bash
-gcloud artifacts repositories create axiom   --repository-format=docker   --location=us-central1   --description="AXIOM Docker images"
+gcloud iam service-accounts create axiom-orchestrator \
+    --display-name="AXIOM Orchestrator"
 ```
-
-If it succeeds, stop and move to Dockerfile/application verification before building or deploying anything.

@@ -18,6 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+import uuid
 from orchestrator.graph import run_axiom_orchestration, axiom_runner
 from agents.tools.neo4j_tools import _DYNAMIC_KG
 from agents.tools.bigquery_tools import (
@@ -27,6 +28,19 @@ from agents.tools.bigquery_tools import (
     bigquery_get_pi_planning,
     bigquery_get_test_run_results,
     bigquery_list_all_defects,
+    _load_csv,
+)
+from agents.resource_agent import _RES_TO_ASSOCIATE_MAP
+from agents.risk_board import RiskAnalyzer
+from agents.tools.firestore_tools import (
+    firestore_save_user_feedback,
+    firestore_get_positive_exemplars,
+    firestore_get_all_feedback,
+    firestore_get_feedback_stats,
+    firestore_list_user_sessions,
+    firestore_get_session_turns,
+    firestore_save_session_turn,
+    firestore_save_session_metadata
 )
 from streamlit_components.hitl_renderer import render_hitl_checkpoint, format_structured_answer
 
@@ -55,10 +69,105 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+def safe_dataframe(df, use_container_width=True):
+    """Safely render dataframes with fallback if pyarrow has ABI/version constraints."""
+    try:
+        st.dataframe(df, use_container_width=use_container_width)
+    except Exception:
+        try:
+            st.table(df)
+        except Exception:
+            st.write(df)
+
+# User Profile & Session State Initialization
+if "user_id" not in st.session_state:
+    st.session_state.user_id = "JyothiLakshmikanth"
+if "session_id" not in st.session_state:
+    st.session_state.session_id = f"session-{st.session_state.user_id}-01"
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "loaded_session_id" not in st.session_state:
+    st.session_state.loaded_session_id = None
+if "pending_hitl_state" not in st.session_state:
+    st.session_state.pending_hitl_state = None
+
+GITHUB_REPO_URL = "https://github.com/JyothiLakshmikanth/EKey2W"
+GITHUB_REPO_NAME = "JyothiLakshmikanth/EKey2W"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MAIN APPLICATION
+# ──────────────────────────────────────────────────────────────────────────────
+
 # Sidebar
 with st.sidebar:
     st.title("⬡ AXIOM Orchestrator")
     st.caption("Google Cloud Evidence-Driven Multi-Agent System")
+    st.markdown(f"🔗 **Repo:** [{GITHUB_REPO_NAME}]({GITHUB_REPO_URL})")
+
+    # Associate Persona selector directly in sidebar (no login blockage)
+    associate_profiles = [
+        "JyothiLakshmikanth (Lead System Architect)",
+        "bhavya2642-collab (Cloud & Mobile Platform Lead)",
+        "manjunathan-j (Embedded Security Lead)",
+        "Pavi2604 (Vehicle Software & QA Lead)",
+    ]
+    current_persona_idx = 0
+    for idx, p in enumerate(associate_profiles):
+        if st.session_state.user_id in p:
+            current_persona_idx = idx
+            break
+
+    sel_persona = st.selectbox("👤 Active Persona:", associate_profiles, index=current_persona_idx)
+    selected_uid = sel_persona.split(" (")[0]
+    if selected_uid != st.session_state.user_id:
+        st.session_state.user_id = selected_uid
+        st.session_state.session_id = f"session-{selected_uid}-{uuid.uuid4().hex[:6]}"
+        st.session_state.messages = []
+        st.rerun()
+
+    st.caption(f"Session: `{st.session_state.session_id}`")
+
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("➕ New Session", use_container_width=True, help="Start a new session"):
+            new_sid = f"session-{st.session_state.user_id}-{uuid.uuid4().hex[:6]}"
+            firestore_save_session_metadata(st.session_state.user_id, new_sid, "New Conversation")
+            st.session_state.session_id = new_sid
+            st.session_state.messages = []
+            st.session_state.loaded_session_id = new_sid
+            st.rerun()
+    with col_btn2:
+        if st.button("🗑️ Clear Chat", use_container_width=True, help="Clear active conversation"):
+            st.session_state.messages = []
+            st.rerun()
+
+    # Session dropdown
+    past_sessions = firestore_list_user_sessions(st.session_state.user_id)
+    if past_sessions:
+        sids = [s["session_id"] for s in past_sessions]
+        if st.session_state.session_id not in sids:
+            sids.insert(0, st.session_state.session_id)
+        current_idx = sids.index(st.session_state.session_id)
+        chosen_sid = st.selectbox("📂 Switch Session:", sids, index=current_idx)
+        if chosen_sid != st.session_state.session_id:
+            st.session_state.session_id = chosen_sid
+            turns = firestore_get_session_turns(chosen_sid)
+            st.session_state.messages = []
+            for t in turns:
+                if t.get("role") == "user" or (t.get("query") and not t.get("content")):
+                    st.session_state.messages.append({"role": "user", "content": t.get("query") or t.get("content", "")})
+                if t.get("content") or t.get("summary"):
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": t.get("content") or t.get("summary", ""),
+                        "visual": t.get("visual"),
+                        "evidences": t.get("evidences", []),
+                        "target_master": t.get("target_master", "AXIOM-PM")
+                    })
+            st.session_state.loaded_session_id = chosen_sid
+            st.rerun()
+
+    st.divider()
 
     st.subheader("Knowledge Foundation")
     st.write(f"**Neo4j KG Nodes:** {len(_DYNAMIC_KG.nodes)}")
@@ -97,132 +206,263 @@ tab_cockpit, tab_chat, tab_bq, tab_kg, tab_envelopes = st.tabs([
 # TAB 1: Project Risk Cockpit
 # ──────────────────────────────────────────────────────────────────────────────
 with tab_cockpit:
-    st.title("🎯 AXIOM Project Risk Cockpit")
-    st.caption("Live Executive Risk Assessment, Resource Bottlenecks, and Critical Defect Radar across AXIOM E-Key 2W.")
+    st.title("🎯 Project Risk Cockpit")
+    st.markdown("### 🚘 Project: **AXIOM E-Key 2W Digital Key Platform**")
+    st.caption(f"Authoritative Multi-Agent Risk Intelligence &bull; Target Repository: [{GITHUB_REPO_NAME}]({GITHUB_REPO_URL}) &bull; Active Milestone: Alpha Safety Gate")
 
-    # Load Risk Report Data
-    report_path = os.path.join(os.path.dirname(__file__), "agents", "risk_board", "risk_analysis_report.json")
-    risk_data = {}
-    if os.path.exists(report_path):
-        try:
-            with open(report_path, "r", encoding="utf-8") as f:
-                risk_data = json.load(f)
-        except Exception:
-            pass
+    # 1. Fetch live sprint planning, capacity planning, and PI planning data
+    raw_capacity = bigquery_get_team_capacity() or []
+    all_sprint_tasks = _load_csv("sprint_planning") or []
+    raw_pi = bigquery_get_pi_planning() or _load_csv("pi_planning") or []
 
-    summary = risk_data.get("summary", {
-        "overall_risk_level": "Medium",
-        "critical_defects": 6,
-        "resource_bottlenecks": 6,
-        "at_risk_sprints": 1
-    })
+    # Helper function to resolve assignee
+    def get_assignee_display(raw_id):
+        if not raw_id or raw_id == "Unassigned":
+            return "Unassigned"
+        info = _RES_TO_ASSOCIATE_MAP.get(raw_id)
+        if info:
+            return f"{info['associate']} ({raw_id})"
+        return raw_id
 
-    # Top Metric Banner
+    # 2. Execute purely dynamic multi-source project risk analysis (Zero Hardcoding)
+    risk_analyzer = RiskAnalyzer(
+        jira_df=pd.DataFrame(all_sprint_tasks) if all_sprint_tasks else None,
+        capacity_df=pd.DataFrame(raw_capacity) if raw_capacity else None,
+        pi_df=pd.DataFrame(raw_pi) if raw_pi else None
+    )
+    temporal_data = risk_analyzer.analyze_temporal_risks()
+
+    # Top Executive Metric Banner (100% Data-Driven)
     r_col1, r_col2, r_col3, r_col4 = st.columns(4)
+    has_critical_blocker = any(t.get('priority') == 'Critical' for t in temporal_data['today_risks'])
     with r_col1:
-        st.metric("Overall Project Risk", f"🟠 {summary.get('overall_risk_level', 'Medium')}", delta="Amber Alert", delta_color="inverse")
+        st.metric(
+            "Project Overall Health",
+            "🔴 High Risk" if has_critical_blocker else "🟠 Medium-High",
+            delta=f"{temporal_data['today_metrics']['critical_path_items']} Items In-Flight",
+            delta_color="inverse"
+        )
     with r_col2:
-        st.metric("Critical / High Defects", f"{summary.get('critical_defects', 6)} Active", delta="Requires RCA", delta_color="inverse")
+        st.metric(
+            "⏪ Yesterday's Risks",
+            f"{temporal_data['yesterday_metrics']['total_resolved']} Resolved",
+            delta=f"{temporal_data['yesterday_metrics']['points_delivered']} Pts Delivered",
+            delta_color="normal"
+        )
     with r_col3:
-        st.metric("Capacity Bottlenecks", f"{summary.get('resource_bottlenecks', 6)} Overloaded", delta="> 85% Ceiling", delta_color="inverse")
+        st.metric(
+            "⚡ Today's Active Risks",
+            f"{temporal_data['today_metrics']['active_defects_count']} In-Flight",
+            delta=f"{temporal_data['today_metrics']['overloaded_engineers_count']} Bottlenecks",
+            delta_color="inverse"
+        )
     with r_col4:
-        st.metric("At-Risk Sprints", "SPR-03 (Active)", delta="Critical Path Impact", delta_color="inverse")
+        st.metric(
+            "⏩ Tomorrow's Risks",
+            f"{temporal_data['tomorrow_metrics']['horizon_risks_count']} Horizon",
+            delta=temporal_data['tomorrow_metrics']['next_safety_gate'],
+            delta_color="inverse"
+        )
 
     st.markdown("---")
 
-    # Layout: Critical Defect Radar & Resource Overload Watch
-    c_left, c_right = st.columns([3, 2])
+    # ──────────────────────────────────────────────────────────────────────────
+    # 3 TEMPORAL RISK TABS: YESTERDAY, TODAY, TOMORROW (100% Dynamic)
+    # ──────────────────────────────────────────────────────────────────────────
+    risk_tab_yesterday, risk_tab_today, risk_tab_tomorrow = st.tabs([
+        "⏪ Yesterday's Risks (Resolved & Historical Baseline)",
+        "⚡ Today's Risks (Active Sprint 3 Critical Hotspots)",
+        "⏩ Tomorrow's Risks (Upcoming Sprints & Horizon Risks)"
+    ])
 
-    with c_left:
-        st.subheader("🚨 Critical Defect Radar & Delivery Impact")
-        st.write("Identified high-impact defects threatening upcoming delivery milestones:")
+    # ==========================================================================
+    # SUB-TAB 1: YESTERDAY'S RISKS (Dynamically derived from historical sprints)
+    # ==========================================================================
+    with risk_tab_yesterday:
+        st.subheader("⏪ Historical Baseline & Yesterday's Mitigated Risks")
+        st.caption("Technical blockers, defects, and environmental risks from historical sprints that have been successfully isolated, verified, and closed.")
 
-        defects = risk_data.get("critical_defects", [
+        y_c1, y_c2, y_c3 = st.columns(3)
+        y_c1.metric("Resolved Baseline Risks", f"{temporal_data['yesterday_metrics']['total_resolved']} Items", delta="100% Closed")
+        y_c2.metric("Regression Rate", temporal_data['yesterday_metrics']['regression_rate'], delta="Safe")
+        y_c3.metric("Delivered Velocity", f"{temporal_data['yesterday_metrics']['points_delivered']} Points ({temporal_data['yesterday_metrics']['hours_logged']}h)", delta="On Track")
+
+        yesterday_rows = [
             {
-                "id": "TWK-107",
-                "summary": "Boundary-zone unlock intermittently fails",
-                "priority": "Critical",
-                "status": "Open",
-                "assignee": "RES-04",
-                "sprint": "SPR-03",
-                "impact": "High (ASIL-B Safety Violation)",
-                "mitigation": "Edge case testing & hysteresis patch"
-            },
-            {
-                "id": "TWK-108",
-                "summary": "Unlock latency exceeds target on low-power phone",
-                "priority": "High",
-                "status": "Open",
-                "assignee": "RES-05",
-                "sprint": "SPR-03",
-                "impact": "Medium (QoS SLA Breach)",
-                "mitigation": "Async polling & BLE buffer optimization"
-            },
-            {
-                "id": "TWK-104",
-                "summary": "Passive unlock state desynchronization",
-                "priority": "Critical",
-                "status": "In Progress",
-                "assignee": "RES-04",
-                "sprint": "SPR-03",
-                "impact": "High (Security Lockout)",
-                "mitigation": "State machine mutex enforcement"
+                "Issue ID": r["id"],
+                "Summary": r["title"],
+                "Sprint": r["sprint"],
+                "Assignee": r["assignee"],
+                "Initial Threat": r["threat"],
+                "Resolution Applied": r["resolution"],
+                "Verification Status": r["status"]
             }
-        ])
+            for r in temporal_data["yesterday_risks"]
+        ]
+        safe_dataframe(pd.DataFrame(yesterday_rows), use_container_width=True)
 
-        defect_df = pd.DataFrame(defects)[["id", "summary", "priority", "status", "assignee", "sprint", "impact"]]
-        st.dataframe(defect_df, use_container_width=True)
+        st.markdown("#### 🛡️ Historical Safeguards Established")
+        for sg in temporal_data["yesterday_metrics"]["safeguards"]:
+            st.markdown(f"- {sg}")
 
-        st.caption("💡 Click below to transfer high-priority defect triage into the cognitive engine:")
-        act_col1, act_col2 = st.columns(2)
-        with act_col1:
-            if st.button("⚡ Dispatch TWK-107 Defect Triage & RCA"):
-                st.session_state.temp_prompt = "What is the defect triage, root cause, and blast radius for TWK-107?"
-                st.info("Query queued! Switch to '🧠 Multi-Agent Orchestrator & HITL' tab to view execution.")
-        with act_col2:
-            if st.button("⚖️ Generate SPR-03 Workload Rebalancing Plan"):
-                st.session_state.temp_prompt = "Analyze team capacity bottlenecks and recommend rebalancing plan for SPR-03"
-                st.info("Query queued! Switch to '🧠 Multi-Agent Orchestrator & HITL' tab to view execution.")
+    # ==========================================================================
+    # SUB-TAB 2: TODAY'S RISKS (Dynamically derived from active sprint items)
+    # ==========================================================================
+    with risk_tab_today:
+        st.subheader("⚡ Today's Critical Hotspots & Active Delivery Risks (Sprint 3)")
+        st.caption("Active delivery threats in current Sprint: Critical safety violations, open bugs, and engineer capacity overallocation (>85% safe ceiling).")
 
-    with c_right:
-        st.subheader("👥 Resource Bottlenecks (>85% Cap)")
-        st.write("Engineers exceeding the 85% safe allocation ceiling:")
+        # Layout: Critical Defect Radar & Resource Overload Watch
+        c_left, c_right = st.columns([3, 2])
 
-        constraints = risk_data.get("resource_constraints", {})
-        if constraints:
-            res_list = []
-            for r_id, r_info in constraints.items():
-                res_list.append({
-                    "Resource": r_id,
-                    "Name": r_info.get("name", "Unknown"),
-                    "Role": r_info.get("role", "Engineer"),
-                    "Allocation": f"{r_info.get('allocation', 0)}%",
-                    "Risk": r_info.get("risk_level", "High")
-                })
-            res_df = pd.DataFrame(res_list)
-            st.dataframe(res_df, use_container_width=True)
-        else:
-            st.success("No resource constraints recorded.")
+        with c_left:
+            st.markdown("#### 🚨 Critical Defect Radar & Immediate Delivery Blockers")
 
-        st.subheader("📅 Sprint Delivery Health")
-        sprint_risks = risk_data.get("sprint_risks", [
-            {"sprint_id": "SPR-01", "total_items": 2, "open_items": 0, "risk_level": "Low"},
-            {"sprint_id": "SPR-02", "total_items": 1, "open_items": 0, "risk_level": "Low"},
-            {"sprint_id": "SPR-03", "total_items": 7, "open_items": 4, "risk_level": "Critical"},
-            {"sprint_id": "SPR-04", "total_items": 4, "open_items": 4, "risk_level": "Medium"}
-        ])
-        s_df = pd.DataFrame(sprint_risks)[["sprint_id", "total_items", "open_items", "risk_level"]]
-        st.dataframe(s_df, use_container_width=True)
+            today_rows = [
+                {
+                    "ID": r["id"],
+                    "Summary": r["title"],
+                    "Type": r["type"],
+                    "Priority": r["priority"],
+                    "Status": r["status"],
+                    "Assignee": r["assignee"],
+                    "Sprint": r["sprint"],
+                    "Impact": r["impact"],
+                    "Mitigation": r["mitigation"]
+                }
+                for r in temporal_data["today_risks"]
+            ]
+            today_df = pd.DataFrame(today_rows)
+            safe_dataframe(today_df, use_container_width=True)
+
+            # Determine top critical item dynamically
+            crit_bugs = [r for r in temporal_data["today_risks"] if r["priority"] == "Critical" and r["type"] in ["Bug", "Defect"]]
+            top_crit_id = crit_bugs[0]["id"] if crit_bugs else (temporal_data["today_risks"][0]["id"] if temporal_data["today_risks"] else "TWK-107")
+
+            st.caption("💡 Transfer high-priority defect triage directly into the multi-agent cognitive engine:")
+            act_col1, act_col2 = st.columns(2)
+            with act_col1:
+                if st.button(f"⚡ Dispatch {top_crit_id} Defect Triage & RCA", use_container_width=True):
+                    st.session_state.temp_prompt = f"What is the defect triage, root cause, and blast radius for {top_crit_id}?"
+                    st.info("Query queued! Switch to '🧠 Multi-Agent Orchestrator & HITL' tab to view execution.")
+            with act_col2:
+                if st.button("⚖️ Generate SPR-03 Capacity Rebalancing Plan", use_container_width=True):
+                    st.session_state.temp_prompt = "Analyze team capacity bottlenecks and recommend rebalancing plan for SPR-03"
+                    st.info("Query queued! Switch to '🧠 Multi-Agent Orchestrator & HITL' tab to view execution.")
+
+        with c_right:
+            st.markdown("#### 👥 Resource Bottlenecks Today (>85% Cap)")
+            res_list = [
+                {
+                    "Associate": r["associate"],
+                    "Role": r["role"],
+                    "Domain": r["domain"],
+                    "Allocation": f"{r['allocation']}%",
+                    "Risk": r["status"]
+                }
+                for r in temporal_data["today_resource_overloads"]
+            ]
+            safe_dataframe(pd.DataFrame(res_list), use_container_width=True)
+
+            # Cumulative workload callout (100% dynamically aggregated)
+            st.caption("📊 **Cumulative Multi-Role Allocation Across Project**:")
+            for name, alloc_summary in temporal_data["today_associate_aggregates"].items():
+                st.markdown(f"- **{name}**: `{alloc_summary}`")
+
+            st.markdown("#### 📅 Active Sprint Pulse (SPR-03)")
+            st.warning(f"⚠️ **Sprint 3 Health**: {len(temporal_data['today_risks'])} items in-flight; {top_crit_id} threatens Alpha gate delivery unless active mitigations are completed.")
+
+        st.markdown("---")
+        st.subheader("🛡️ Immediate Mitigation Directives for Today")
+        for m in temporal_data["today_mitigations"]:
+            st.markdown(m)
+
+    # ==========================================================================
+    # SUB-TAB 3: TOMORROW'S RISKS (Dynamically derived from future sprints & PI)
+    # ==========================================================================
+    with risk_tab_tomorrow:
+        st.subheader("⏩ Tomorrow's Risks: Horizon Vulnerabilities & Upcoming Milestones")
+        st.caption("Anticipated architectural debt, emerging security windows, and PI milestone dependencies spanning future sprints and roadmaps.")
+
+        tom_c1, tom_c2, tom_c3 = st.columns(3)
+        tom_c1.metric("Emerging Horizon Risks", f"{temporal_data['tomorrow_metrics']['horizon_risks_count']} Tracked", delta="Requires Preemptive Governance")
+        tom_c2.metric("Next Critical Safety Gate", temporal_data['tomorrow_metrics']['next_safety_gate'], delta=f"{temporal_data['tomorrow_metrics']['days_remaining']} Days Remaining")
+        tom_c3.metric("Upcoming PI Focus", temporal_data['tomorrow_metrics']['upcoming_pi_focus'], delta="Security & QA Gate")
+
+        tomorrow_rows = [
+            {
+                "Target Milestone": r["milestone"],
+                "Work Item": r["id"],
+                "Horizon Risk Title": r["title"],
+                "Threat Mechanism": r["threat"],
+                "Owner": r["owner"],
+                "Preemptive Strategy": r["preemptive_strategy"]
+            }
+            for r in temporal_data["tomorrow_risks"]
+        ]
+        safe_dataframe(pd.DataFrame(tomorrow_rows), use_container_width=True)
+
+        st.markdown("#### 🗺️ Program Increment Horizon Roadmap (PI-1 to PI-4)")
+        safe_dataframe(pd.DataFrame(temporal_data["pi_roadmap"]), use_container_width=True)
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Interactive Sprint Tasks Explorer (TWK-101 to TWK-120)
+    # ──────────────────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("📋 Comprehensive Sprint Tasks & Delivery Tracker (TWK-101 — TWK-120)")
+    st.caption("Full traceability across all 20 sprint backlog work items, assignees, priorities, and components from BigQuery `axiom_data.sprint_planning`.")
+
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
+    with filter_col1:
+        sprint_filter = st.selectbox(
+            "Filter by Sprint",
+            options=["All Sprints"] + sorted(list(set(t.get("Sprint_ID") for t in all_sprint_tasks if t.get("Sprint_ID"))))
+        )
+    with filter_col2:
+        status_filter = st.selectbox(
+            "Filter by Status",
+            options=["All Statuses", "Open", "In Progress", "Done", "To Do"]
+        )
+    with filter_col3:
+        type_filter = st.selectbox(
+            "Filter by Work Item Type",
+            options=["All Types", "Bug", "Story", "Task", "Risk", "Epic"]
+        )
+
+    # Filter tasks
+    filtered_tasks = all_sprint_tasks
+    if sprint_filter != "All Sprints":
+        filtered_tasks = [t for t in filtered_tasks if t.get("Sprint_ID") == sprint_filter]
+    if status_filter != "All Statuses":
+        filtered_tasks = [t for t in filtered_tasks if t.get("Status") == status_filter]
+    if type_filter != "All Types":
+        filtered_tasks = [t for t in filtered_tasks if t.get("Type") == type_filter]
+
+    task_table_data = []
+    for t in filtered_tasks:
+        task_table_data.append({
+            "ID": t.get("Id"),
+            "Type": t.get("Type"),
+            "Summary": t.get("Summary"),
+            "Sprint": t.get("Sprint_ID"),
+            "Status": t.get("Status"),
+            "Priority": t.get("Priority"),
+            "Assignee": get_assignee_display(t.get("Owned_By")),
+            "Points": t.get("Story_Points"),
+            "Component": t.get("Components")
+        })
+
+    safe_dataframe(pd.DataFrame(task_table_data), use_container_width=True)
 
     st.markdown("---")
     st.subheader("🛡️ Executive Risk Mitigation Strategies")
-    mitigations = risk_data.get("mitigation_strategies", [
-        "Rebalance SPR-03 tasks away from RES-04 (110% allocation) to prevent delivery slippage.",
-        "Prioritize TWK-107 boundary-zone patch to meet ISO 26262 ASIL-B safety criteria.",
-        "Initiate cross-training for BLE stack firmware to mitigate single-point dependency on RES-05."
-    ])
-    for idx, strat in enumerate(mitigations, 1):
-        st.markdown(f"**{idx}.** {strat}")
+    # Dynamically derived from active bottlenecks and horizon risks
+    exec_mitigations = temporal_data["today_mitigations"][:3] + [
+        f"**Preemptive Horizon Action for {r['id']} ({r['title']})**: {r['preemptive_strategy']}"
+        for r in temporal_data["tomorrow_risks"][:3]
+    ]
+    for strat in exec_mitigations:
+        st.markdown(strat)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # TAB 2: Multi-Agent Orchestrator & HITL
@@ -250,7 +490,7 @@ with tab_chat:
             st.session_state.temp_prompt = "Analyze team capacity bottlenecks and recommend rebalancing plan for SPR-03"
 
     # Display chat history
-    for msg in st.session_state.messages:
+    for idx, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg.get("visual") and msg["visual"].get("requires_visual"):
@@ -262,6 +502,52 @@ with tab_chat:
                 with st.expander(f"📋 Verified Evidence Envelopes ({len(msg['evidences'])})"):
                     for env in msg["evidences"]:
                         st.json(env)
+
+            # Interactive Feedback Mechanism (Thumbs Up / Thumbs Down & Exemplar Learning)
+            if msg.get("role") == "assistant" and msg.get("content"):
+                fb_id = f"fb_{st.session_state.session_id}_{idx}"
+                col_f1, col_f2, col_f3 = st.columns([1.2, 1.2, 7.6])
+                with col_f1:
+                    if st.button("👍 Helpful", key=f"up_{fb_id}", help="Save this response to learned exemplars for future queries"):
+                        prior_q = ""
+                        for p in reversed(st.session_state.messages[:idx]):
+                            if p.get("role") == "user":
+                                prior_q = p.get("content", "")
+                                break
+                        firestore_save_user_feedback(
+                            user_id=st.session_state.user_id,
+                            session_id=st.session_state.session_id,
+                            query=prior_q or "User Query",
+                            response=msg.get("content", ""),
+                            rating="positive",
+                            comment="User approved response format & technical accuracy",
+                            master=msg.get("target_master", "AXIOM-PM")
+                        )
+                        st.session_state[fb_id] = "positive"
+                        st.rerun()
+                with col_f2:
+                    if st.button("👎 Critique", key=f"down_{fb_id}", help="Flag response for refinement"):
+                        prior_q = ""
+                        for p in reversed(st.session_state.messages[:idx]):
+                            if p.get("role") == "user":
+                                prior_q = p.get("content", "")
+                                break
+                        firestore_save_user_feedback(
+                            user_id=st.session_state.user_id,
+                            session_id=st.session_state.session_id,
+                            query=prior_q or "User Query",
+                            response=msg.get("content", ""),
+                            rating="negative",
+                            comment="User flagged response for refinement",
+                            master=msg.get("target_master", "AXIOM-PM")
+                        )
+                        st.session_state[fb_id] = "negative"
+                        st.rerun()
+
+                if st.session_state.get(fb_id) == "positive":
+                    st.success("⭐ **Benchmark Learned**: Added to memory! Future syntheses will refer to this approved benchmark.")
+                elif st.session_state.get(fb_id) == "negative":
+                    st.info("📝 **Feedback Recorded**: Critique logged for continuous multi-agent cognitive improvement.")
 
     # ──────────────────────────────────────────────────────────────────────────
     # Check for Pending HITL Checkpoint
@@ -285,8 +571,24 @@ with tab_chat:
                     "role": "assistant",
                     "content": f"**[Status: Verified & Approved by Human Reviewer]**\n\n{final_md}",
                     "visual": state.get("visual_artifact"),
-                    "evidences": state.get("evidence_envelopes", [])
+                    "evidences": state.get("evidence_envelopes", []),
+                    "target_master": state.get("target_master", "AXIOM-PM")
                 })
+                # Persist to Firestore memory
+                try:
+                    firestore_save_session_turn(
+                        session_id=st.session_state.session_id,
+                        turn_data={
+                            "role": "assistant",
+                            "content": final_md,
+                            "target_master": state.get("target_master", "AXIOM-PM"),
+                            "visual": state.get("visual_artifact"),
+                            "evidences": state.get("evidence_envelopes", [])
+                        },
+                        user_id=st.session_state.user_id
+                    )
+                except Exception:
+                    pass
                 st.session_state.pending_hitl_state = None
                 st.rerun()
 
@@ -318,11 +620,24 @@ with tab_chat:
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
+        try:
+            firestore_save_session_turn(
+                session_id=st.session_state.session_id,
+                turn_data={"role": "user", "query": prompt, "content": prompt},
+                user_id=st.session_state.user_id
+            )
+        except Exception:
+            pass
+
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.spinner("AXIOM Masters reasoning through 9-node LangGraph cognitive loops..."):
-            res = run_axiom_orchestration(query=prompt)
+            res = run_axiom_orchestration(
+                query=prompt,
+                session_id=st.session_state.session_id,
+                user_id=st.session_state.user_id
+            )
 
             # Check for clarification needed
             clarification = res.get("clarification", {})
@@ -334,7 +649,8 @@ with tab_chat:
                         st.write(f"- {q}")
                     st.session_state.messages.append({
                         "role": "assistant",
-                        "content": res.get("final_output_markdown", "Clarification needed.")
+                        "content": res.get("final_output_markdown", "Clarification needed."),
+                        "target_master": "AXIOM-ROUTER"
                     })
             else:
                 # If human validation is required, pause at checkpoint
@@ -354,7 +670,8 @@ with tab_chat:
                         "role": "assistant",
                         "content": output_md,
                         "visual": res.get("visual_artifact"),
-                        "evidences": res.get("evidence_envelopes", [])
+                        "evidences": res.get("evidence_envelopes", []),
+                        "target_master": res.get("target_master", "AXIOM-PM")
                     })
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -381,7 +698,7 @@ with tab_bq:
         tasks = bigquery_get_sprint_tasks("")
         if tasks:
             df = pd.DataFrame(tasks)
-            st.dataframe(df, use_container_width=True)
+            safe_dataframe(df, use_container_width=True)
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric("Total Items", len(df))
             bugs = df[df["Type"] == "Bug"] if "Type" in df.columns else pd.DataFrame()
@@ -393,7 +710,7 @@ with tab_bq:
         cap = bigquery_get_team_capacity()
         if cap:
             df = pd.DataFrame(cap)
-            st.dataframe(df, use_container_width=True)
+            safe_dataframe(df, use_container_width=True)
             over = df[df["Allocation_%"].astype(str).str.replace("%", "").astype(float) > 85]
             if not over.empty:
                 st.warning(f"⚠️ {len(over)} engineer allocations exceed the 85% planned capacity limit!")
@@ -403,7 +720,7 @@ with tab_bq:
         comp = bigquery_get_competency_matrix()
         if comp:
             df = pd.DataFrame(comp)
-            st.dataframe(df, use_container_width=True)
+            safe_dataframe(df, use_container_width=True)
             st.caption(f"Showing {len(df)} skill competency ratings across associates.")
 
     elif "pi_planning" in bq_table:
@@ -411,21 +728,21 @@ with tab_bq:
         pi = bigquery_get_pi_planning()
         if pi:
             df = pd.DataFrame(pi)
-            st.dataframe(df, use_container_width=True)
+            safe_dataframe(df, use_container_width=True)
 
     elif "test_cases" in bq_table:
         st.subheader("Master Test Case Store (`axiom_data.test_cases`)")
         tc = bigquery_get_test_run_results()
         if tc:
             df = pd.DataFrame(tc)
-            st.dataframe(df, use_container_width=True)
+            safe_dataframe(df, use_container_width=True)
 
     elif "defects_only" in bq_table:
         st.subheader("Authoritative Defect Queue (`Type = 'Bug'`)")
         defects = bigquery_list_all_defects()
         if defects:
             df = pd.DataFrame(defects)
-            st.dataframe(df, use_container_width=True)
+            safe_dataframe(df, use_container_width=True)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # TAB 3: Neo4j Knowledge Graph
@@ -444,23 +761,81 @@ with tab_kg:
         {"Source": e.get("source"), "Relationship": e.get("relationship"), "Target": e.get("target"), "Category": e.get("category")}
         for e in _DYNAMIC_KG.edges
     ]
-    st.dataframe(pd.DataFrame(edge_rows), use_container_width=True)
+    safe_dataframe(pd.DataFrame(edge_rows), use_container_width=True)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TAB 4: Evidence Vault
+# TAB 5: Evidence Vault & Learned Response Memory
 # ──────────────────────────────────────────────────────────────────────────────
 with tab_envelopes:
     st.header("🛡️ Evidence Vault & Grounded Provenance")
-    st.caption("Immutable EvidenceEnvelopes collected across LangGraph cognitive execution.")
+    st.caption("Immutable EvidenceEnvelopes collected across LangGraph cognitive execution & learned human feedback benchmarks.")
 
-    all_evidences = []
-    for m in st.session_state.get("messages", []):
-        all_evidences.extend(m.get("evidences", []))
+    # Sub-tabs for Evidence and Learned Memory
+    sub_tab_evidence, sub_tab_memory = st.tabs([
+        "📋 Verified Evidence Envelopes",
+        "⭐ Learned Response Benchmarks & Feedback"
+    ])
 
-    if all_evidences:
-        st.write(f"Collected **{len(all_evidences)}** verified evidence envelopes across active session:")
-        for idx, env in enumerate(all_evidences, 1):
-            with st.expander(f"Artifact {idx}: {env.get('artifact_id')} ({env.get('artifact_type')}) - Source: {env.get('source_system')}"):
-                st.json(env)
-    else:
-        st.info("No evidence envelopes collected yet in this session. Run a query in Tab 1 to collect grounded evidence.")
+    with sub_tab_evidence:
+        all_evidences = []
+        for m in st.session_state.get("messages", []):
+            all_evidences.extend(m.get("evidences", []))
+
+        if all_evidences:
+            st.write(f"Collected **{len(all_evidences)}** verified evidence envelopes across active session:")
+            for idx, env in enumerate(all_evidences, 1):
+                with st.expander(f"Artifact {idx}: {env.get('artifact_id')} ({env.get('artifact_type')}) - Source: {env.get('source_system')}"):
+                    st.json(env)
+        else:
+            st.info("No evidence envelopes collected yet in this session. Run a query in Tab 2 to collect grounded evidence.")
+
+    with sub_tab_memory:
+        st.subheader("⭐ Human Feedback & Exemplar Learning Memory")
+        st.caption(
+            "AXIOM continuously aligns with team standards through user ratings. "
+            "Responses approved with 👍 are stored as positive exemplars and automatically injected into "
+            "the Vertex AI Gemini synthesis prompt to guide format, technical rigor, and actionable recommendations."
+        )
+
+        # 1. Feedback KPI Metrics
+        fb_stats = firestore_get_feedback_stats()
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Total Feedback", fb_stats["total_feedback"])
+        c2.metric("👍 Helpful", fb_stats["positive"])
+        c3.metric("👎 Critiques", fb_stats["negative"])
+        c4.metric("🧠 Learned Exemplars", fb_stats["learned_exemplars"])
+        c5.metric("Satisfaction", f"{fb_stats['satisfaction_pct']}%")
+
+        st.markdown("---")
+        st.subheader("📚 Active Learned Benchmarks (Few-Shot Exemplars)")
+        exemplars = firestore_get_positive_exemplars(limit=10)
+        if exemplars:
+            for ex in exemplars:
+                with st.expander(f"⭐ Approved Benchmark: {ex.get('query', 'Query')[:60]}..."):
+                    st.write(f"**Query**: {ex.get('query')}")
+                    st.write(f"**Approved By**: `{ex.get('user_id', 'Unknown')}` | **Session**: `{ex.get('session_id', 'N/A')}`")
+                    if ex.get("comment"):
+                        st.info(f"💡 **User Note**: {ex.get('comment')}")
+                    st.markdown("**Approved Response Content:**")
+                    st.markdown(ex.get("response", ""))
+        else:
+            st.info("No approved exemplars yet. Click 👍 on any assistant response in Tab 2 to teach AXIOM your preferred format!")
+
+        st.markdown("---")
+        st.subheader("📝 Complete Human Feedback Audit Trail")
+        all_fb = firestore_get_all_feedback()
+        if all_fb:
+            fb_table = [
+                {
+                    "Timestamp": f.get("timestamp", "")[:19],
+                    "User": f.get("user_id"),
+                    "Rating": "👍 Helpful" if f.get("rating") == "positive" else "👎 Needs Improvement",
+                    "Master": f.get("master", "AXIOM-PM"),
+                    "Query": (f.get("query", "")[:50] + "...") if len(f.get("query", "")) > 50 else f.get("query", ""),
+                    "User Note": f.get("comment", "")
+                }
+                for f in all_fb
+            ]
+            safe_dataframe(pd.DataFrame(fb_table), use_container_width=True)
+        else:
+            st.caption("No feedback entries recorded yet.")
