@@ -22,11 +22,12 @@ ENVIRONMENT="${1:-prod}"
 REGION="${2:-us-central1}"
 SERVICE_NAME="axiom-orchestrator"
 IMAGE_NAME="axiom-orchestrator"
+ARTIFACT_REPOSITORY="axiom"
 MEMORY="2Gi"
 CPU="2"
 TIMEOUT="3600"
-MAX_INSTANCES="10"
-MIN_INSTANCES="1"
+MAX_INSTANCES="1"
+MIN_INSTANCES="0"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -137,9 +138,9 @@ build_docker_image() {
     log_info "Building Docker image..."
 
     PROJECT_ID=$(get_project_id)
-    FULL_IMAGE_NAME="gcr.io/$PROJECT_ID/$IMAGE_NAME:$ENVIRONMENT-$(date +%s)"
+    FULL_IMAGE_NAME="$REGION-docker.pkg.dev/$PROJECT_ID/$ARTIFACT_REPOSITORY/$IMAGE_NAME:$ENVIRONMENT-$(date +%s)"
 
-    if ! docker build -f Dockerfile.new -t "$FULL_IMAGE_NAME" \
+    if ! docker build -f Dockerfile -t "$FULL_IMAGE_NAME" \
         --build-arg ENVIRONMENT=$ENVIRONMENT \
         --platform linux/amd64 \
         .; then
@@ -151,16 +152,34 @@ build_docker_image() {
     echo "$FULL_IMAGE_NAME"
 }
 
-push_to_gcr() {
-    log_info "Pushing image to Google Container Registry..."
+ensure_artifact_registry() {
+    log_info "Ensuring Artifact Registry repository exists..."
+
+    PROJECT_ID=$(get_project_id)
+    gcloud services enable artifactregistry.googleapis.com --project "$PROJECT_ID" --quiet
+
+    if ! gcloud artifacts repositories describe "$ARTIFACT_REPOSITORY" \
+        --location "$REGION" --project "$PROJECT_ID" &> /dev/null; then
+        gcloud artifacts repositories create "$ARTIFACT_REPOSITORY" \
+            --repository-format docker \
+            --location "$REGION" \
+            --description "AXIOM container images" \
+            --project "$PROJECT_ID" \
+            --quiet
+    fi
+
+    log_success "Artifact Registry repository is ready"
+}
+
+push_to_artifact_registry() {
+    log_info "Pushing image to Artifact Registry..."
 
     FULL_IMAGE_NAME=$1
 
-    # Configure Docker authentication for GCR
-    gcloud auth configure-docker gcr.io
+    gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
     if ! docker push "$FULL_IMAGE_NAME"; then
-        log_error "Failed to push image to GCR"
+        log_error "Failed to push image to Artifact Registry"
         exit 1
     fi
 
@@ -174,18 +193,8 @@ deploy_to_cloud_run() {
     FULL_IMAGE_NAME=$1
     SERVICE_NAME_FULL="$SERVICE_NAME-$ENVIRONMENT"
 
-    # Check if service exists
-    if gcloud run services describe "$SERVICE_NAME_FULL" --region "$REGION" &> /dev/null; then
-        log_info "Updating existing Cloud Run service..."
-        UPDATE_OR_CREATE="--update"
-    else
-        log_info "Creating new Cloud Run service..."
-        UPDATE_OR_CREATE="--create"
-    fi
-
-    # Deploy to Cloud Run
+    # gcloud run deploy creates the service when needed and updates it otherwise.
     gcloud run deploy "$SERVICE_NAME_FULL" \
-        $UPDATE_OR_CREATE \
         --image "$FULL_IMAGE_NAME" \
         --region "$REGION" \
         --platform managed \
@@ -225,7 +234,7 @@ verify_deployment() {
     log_info "Testing health endpoint..."
     sleep 10  # Wait for service to be ready
 
-    if curl -s -f "$SERVICE_URL/health" > /dev/null; then
+    if curl -s -f -H "Authorization: Bearer $(gcloud auth print-identity-token)" "$SERVICE_URL/health" > /dev/null; then
         log_success "Health check passed"
     else
         log_warn "Health check failed (service may still be warming up)"
@@ -381,7 +390,7 @@ SUPPORT
 
 View service logs: gcloud run logs read $SERVICE_NAME_FULL --region $REGION
 View service details: gcloud run services describe $SERVICE_NAME_FULL --region $REGION
-Update service: gcloud run deploy $SERVICE_NAME_FULL --region $REGION --update
+Update service: gcloud run deploy $SERVICE_NAME_FULL --region $REGION --image IMAGE_URL
 Delete service: gcloud run services delete $SERVICE_NAME_FULL --region $REGION
 
 ================================================================================
@@ -410,10 +419,11 @@ main() {
     create_iam_service_account
     setup_firestore
     setup_bigquery
+    ensure_artifact_registry
 
     # Container build and push
     FULL_IMAGE_NAME=$(build_docker_image)
-    push_to_gcr "$FULL_IMAGE_NAME"
+    push_to_artifact_registry "$FULL_IMAGE_NAME"
 
     # Deploy to Cloud Run
     deploy_to_cloud_run "$FULL_IMAGE_NAME"

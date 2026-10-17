@@ -1,0 +1,5 @@
+PI_ID,PI_Name,Start_Date,End_Date,Duration_Weeks,Focus_Area,Key_Milestones,Status,Target_Completion,Quality_Gate,Risk_Level,Notes
+PI-1,Foundation & Digital Enrollment,2026-01-05,2026-02-23,8,MVP Foundation & User Enrollment,MS-01,Completed,2026-02-23,Enrollment & Vehicle Provisioning Complete,Low,Initial product foundation with owner authentication and vehicle pairing
+PI-2,Passive Access & Authorization,2026-02-24,2026-04-13,8,Passive Unlock/Lock & Proximity,MS-02,In Progress,2026-04-13,Passive Access & Latency SLA Met,High,Core passive access with latency optimization and boundary zone handling
+PI-3,Shared Key & Revocation,2026-04-14,2026-06-02,8,Key Sharing & Revocation,MS-03,Planned,2026-06-02,Shared Keys + Revocation + Security Events,High,Shared key distribution with secure revocation and security logging
+PI-4,Release Hardening & Deployment,2026-06-03,2026-07-22,8,Release Readiness & Offline,MS-04,Planned,2026-07-22,Core Features + QA Exit Criteria Met,Medium,Offline grace mode and final release hardening

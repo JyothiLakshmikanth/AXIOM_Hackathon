@@ -134,14 +134,142 @@ class TestCaseStore:
 
         return results
 
+    def _generate_query_embedding_768(self, text: str) -> Optional[List[float]]:
+        """Generates a 768-dim embedding matching text-embedding-004 specification for BigQuery VECTOR_SEARCH."""
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if api_key:
+            try:
+                from google import genai
+                client = genai.Client(api_key=api_key)
+                resp = client.models.embed_content(model="text-embedding-004", contents=[text])
+                if resp and resp.embeddings:
+                    return list(resp.embeddings[0].values)
+            except Exception as e:
+                logger.debug(f"google-genai query embed notice: {e}")
+
+        try:
+            from vertexai.language_models import TextEmbeddingModel
+            model = TextEmbeddingModel.from_pretrained("text-embedding-004")
+            res = model.get_embeddings([text])
+            if res:
+                return list(res[0].values)
+        except Exception as e:
+            logger.debug(f"Vertex AI TextEmbeddingModel notice: {e}")
+
+        # Deterministic 768-dim normalized embedding matching offline schema
+        import hashlib, math
+        dim = 768
+        vec = [0.0] * dim
+        words = text.lower().split()
+        if not words:
+            return None
+        for i, word in enumerate(words):
+            h = int(hashlib.md5(f"w_{word}".encode()).hexdigest(), 16)
+            idx = h % dim
+            sign = 1.0 if (h >> 4) % 2 == 0 else -1.0
+            vec[idx] += sign * (1.0 / math.sqrt(i + 1))
+        norm = math.sqrt(sum(x * x for x in vec))
+        if norm > 0:
+            vec = [round(x / norm, 6) for x in vec]
+        return vec
+
+    def search_by_description_bigquery(self, query: str, top_k: int = 5) -> Optional[List[Dict[str, Any]]]:
+        """
+        Attempts BigQuery native VECTOR_SEARCH on `test_cases_embeddings`.
+        Returns top_k matching test cases if BigQuery is active, otherwise None.
+        """
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT") or os.getenv("PROJECT_ID")
+        if not project_id:
+            return None
+
+        dataset_id = os.getenv("BQ_DATASET_ID", "axiom_data")
+        table_id = "test_cases_embeddings"
+        full_table = f"`{project_id}.{dataset_id}.{table_id}`"
+
+        try:
+            from google.cloud import bigquery
+            client = bigquery.Client(project=project_id)
+            query_vec = self._generate_query_embedding_768(query)
+            if not query_vec:
+                return None
+
+            sql = f"""
+            SELECT 
+                base.test_plan_id,
+                base.test_suite_id,
+                base.test_case_id,
+                base.test_description,
+                base.linked_req_ids,
+                base.test_type,
+                base.test_objective,
+                base.pre_conditions,
+                base.test_steps,
+                base.expected_result,
+                base.priority,
+                base.status,
+                base.owner,
+                base.target_variant,
+                distance
+            FROM VECTOR_SEARCH(
+                TABLE {full_table},
+                'embedding',
+                (SELECT {query_vec} AS query_vector),
+                top_k => {top_k},
+                distance_type => 'COSINE'
+            )
+            ORDER BY distance ASC
+            """
+
+            job = client.query(sql)
+            rows = list(job.result())
+            if not rows:
+                return None
+
+            results = []
+            for row in rows:
+                dist = float(row.distance) if hasattr(row, "distance") and row.distance is not None else 0.5
+                sim_score = max(0.0, min(1.0, round(1.0 - dist, 4)))
+                results.append({
+                    "test_plan_id": getattr(row, "test_plan_id", ""),
+                    "test_suite_id": getattr(row, "test_suite_id", ""),
+                    "test_case_id": getattr(row, "test_case_id", ""),
+                    "test_description": getattr(row, "test_description", ""),
+                    "linked_req_ids": list(getattr(row, "linked_req_ids", []) or []),
+                    "test_type": getattr(row, "test_type", ""),
+                    "test_objective": getattr(row, "test_objective", ""),
+                    "pre_conditions": getattr(row, "pre_conditions", ""),
+                    "test_steps": getattr(row, "test_steps", ""),
+                    "expected_result": getattr(row, "expected_result", ""),
+                    "priority": getattr(row, "priority", ""),
+                    "status": getattr(row, "status", ""),
+                    "owner": getattr(row, "owner", ""),
+                    "target_variant": list(getattr(row, "target_variant", []) or []),
+                    "relevance_score": sim_score,
+                    "match_reason": f"BigQuery VECTOR_SEARCH (cosine similarity: {sim_score})"
+                })
+
+            logger.info(f"BigQuery VECTOR_SEARCH retrieved {len(results)} matches for '{query[:40]}...'")
+            return results
+
+        except Exception as e:
+            logger.info(f"BigQuery VECTOR_SEARCH not active or unavailable ({e}); using local vector search fallback.")
+            return None
+
     def search_by_description(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """
         Performs semantic embedding cosine similarity search over test cases corpus.
-        Returns top_k most relevant test cases with similarity score.
+        1. Tries BigQuery native VECTOR_SEARCH if Cloud environment is available.
+        2. Falls back to in-memory TF-IDF semantic vector space search.
         """
         if not query or not query.strip():
             return []
 
+        # 1. Try BigQuery Cloud Vector Search first
+        bq_results = self.search_by_description_bigquery(query, top_k=top_k)
+        if bq_results:
+            return bq_results
+
+        # 2. Local In-Memory Semantic TF-IDF Vector Search
         if self.vectorizer is not None and self.tfidf_matrix is not None:
             try:
                 from sklearn.metrics.pairwise import cosine_similarity
@@ -158,7 +286,7 @@ class TestCaseStore:
                     tc_id = self.doc_ids[idx]
                     tc = dict(self.test_cases[tc_id])
                     tc["relevance_score"] = round(score, 4)
-                    tc["match_reason"] = f"Semantic description match (score: {round(score, 2)})"
+                    tc["match_reason"] = f"Local TF-IDF semantic match (score: {round(score, 2)})"
                     results.append(tc)
                     if len(results) >= top_k:
                         break

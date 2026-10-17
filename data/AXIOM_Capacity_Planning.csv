@@ -1,0 +1,13 @@
+Associate,Default_Assignee_ID,Role,Domain,Allocation_%,Location,Q1_2026_Hours,Q2_2026_Hours,Q3_2026_Hours,Q4_2026_Hours,Availability_Status,Notes
+JyothiLakshmikanth,GHA-01,System Architect,Architecture,100,Bengaluru,480,480,480,480,Available,Full-time allocation for architecture governance
+bhavya2642-collab,GHA-02,Mobile Engineer,Mobile,80,Bengaluru,384,384,384,384,Available,Part-time with iOS focus
+manjunathan-j,GHA-03,Mobile Engineer,Mobile,90,Pune,432,432,432,432,Available,Primary Android developer
+Pavi2604,GHA-04,Vehicle Software Engineer,Vehicle,100,Bengaluru,480,480,480,480,Available,Full-time vehicle ECU expert
+JyothiLakshmikanth,GHA-01,Vehicle Software Engineer,Vehicle,90,Bengaluru,432,432,432,432,Available,Part-time vehicle gateway focus
+bhavya2642-collab,GHA-02,Cloud Engineer,Cloud,80,Bengaluru,384,384,384,384,Available,Part-time cloud services
+manjunathan-j,GHA-03,Security Engineer,Security,70,Pune,336,336,336,336,Available,Part-time security architecture
+Pavi2604,GHA-04,QA Engineer,QA,100,Bengaluru,480,480,480,480,Available,Full-time QA lead
+JyothiLakshmikanth,GHA-01,QA Automation Engineer,QA,90,Pune,432,432,432,432,Available,Part-time automation framework
+bhavya2642-collab,GHA-02,DevOps Engineer,DevOps,60,Bengaluru,288,288,288,288,Available,Part-time infrastructure
+manjunathan-j,GHA-03,Product Owner,Product,50,Bengaluru,240,240,240,240,Available,Part-time product governance
+Pavi2604,GHA-04,UX Engineer,UX,50,Pune,240,240,240,240,Available,Part-time design lead

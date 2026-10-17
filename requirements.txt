@@ -7,12 +7,13 @@ pydantic==2.5.0
 # LLM & LangGraph
 langchain==0.1.0
 langchain-google-vertexai==0.1.0
-langgraph==0.0.1
+langgraph>=0.1.0
 
 # GCP Integration
 google-cloud-aiplatform==1.42.0
 google-cloud-firestore==2.14.0
 google-cloud-bigquery==3.14.0
+pandas-gbq>=0.19.0
 google-auth==2.25.2
 google-auth-oauthlib==1.1.0
 google-auth-httplib2==0.2.0
@@ -31,9 +32,8 @@ tenacity==8.2.3
 python-json-logger==2.0.7
 prometheus-client==0.19.0
 
-# Development
-pytest==7.4.3
-pytest-asyncio==0.21.1
-black==23.12.0
-pylint==3.0.3
-
+# Development (install locally only — not needed in Docker image)
+# pytest==7.4.3
+# pytest-asyncio==0.21.1
+# black==23.12.0
+# pylint==3.0.3

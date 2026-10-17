@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AXIOM Risk Management Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .risk-score-card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .risk-score {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        
+        .risk-score.low {
+            color: #10b981;
+        }
+        
+        .risk-score.medium {
+            color: #f59e0b;
+        }
+        
+        .risk-score.high {
+            color: #ef4444;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            font-size: 18px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 10px;
+        }
+        
+        .metric {
+            margin: 12px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .metric-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .metric-value {
+            font-weight: bold;
+            font-size: 20px;
+            color: #667eea;
+        }
+        
+        .defect-item {
+            background: #f9fafb;
+            padding: 12px;
+            margin: 8px 0;
+            border-left: 4px solid #ef4444;
+            border-radius: 4px;
+        }
+        
+        .defect-item.medium {
+            border-left-color: #f59e0b;
+        }
+        
+        .defect-item.low {
+            border-left-color: #10b981;
+        }
+        
+        .defect-id {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .defect-summary {
+            font-size: 13px;
+            color: #666;
+            margin: 5px 0;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        
+        .status-badge.critical {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .status-badge.high {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-badge.medium {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-badge.low {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+        
+        .resource-item {
+            background: #f9fafb;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .resource-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .allocation-bar {
+            flex: 1;
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            margin: 0 15px;
+            overflow: hidden;
+        }
+        
+        .allocation-fill {
+            height: 100%;
+            background: #667eea;
+        }
+        
+        .allocation-fill.high {
+            background: #ef4444;
+        }
+        
+        .allocation-percent {
+            color: #667eea;
+            font-weight: bold;
+            min-width: 40px;
+            text-align: right;
+        }
+        
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .filter-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        
+        .filter-item {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .filter-item label {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .filter-item input,
+        .filter-item select {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #764ba2;
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .success {
+            background: #dcfce7;
+            color: #166534;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .sprint-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .sprint-card {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .sprint-card.high {
+            border-left-color: #ef4444;
+        }
+        
+        .sprint-card.medium {
+            border-left-color: #f59e0b;
+        }
+        
+        .sprint-id {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .sprint-stat {
+            font-size: 12px;
+            color: #666;
+            margin: 5px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .filter-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 AXIOM E-Key 2W Risk Management Dashboard</h1>
+            <div class="subtitle">Real-time risk analysis and mitigation tracking</div>
+        </div>
+        
+        <div class="risk-score-card">
+            <h2>Overall Risk Score</h2>
+            <div class="risk-score" id="overallScore">--</div>
+            <div id="riskLevel">Loading...</div>
+            <div id="recommendation" style="margin-top: 15px; color: #666; font-size: 14px;"></div>
+        </div>
+        
+        <div class="filters">
+            <h3>Advanced Filters</h3>
+            <div class="filter-group">
+                <div class="filter-item">
+                    <label>Defect Priority:</label>
+                    <select id="defectPriority">
+                        <option value="all">All</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label>Sprint:</label>
+                    <select id="sprintFilter">
+                        <option value="">All Sprints</option>
+                        <option value="SPR-01">SPR-01</option>
+                        <option value="SPR-02">SPR-02</option>
+                        <option value="SPR-03">SPR-03</option>
+                        <option value="SPR-04">SPR-04</option>
+                        <option value="SPR-05">SPR-05</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <button class="btn" onclick="applyFilters()">Apply Filters</button>
+                    <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div class="card">
+                <h2>Risk Summary</h2>
+                <div class="metric">
+                    <span class="metric-label">Critical Defects</span>
+                    <span class="metric-value" id="criticalDefects">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Resource Bottlenecks</span>
+                    <span class="metric-value" id="resourceBottlenecks">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">At-Risk Sprints</span>
+                    <span class="metric-value" id="atRiskSprints">--</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Top Critical Defects</h2>
+                <div id="criticalDefectsList"></div>
+            </div>
+            
+            <div class="card">
+                <h2>Resource Constraints</h2>
+                <div id="resourceConstraintsList"></div>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div class="card">
+                <h2>Domain Risk Analysis</h2>
+                <div id="domainRisksList"></div>
+            </div>
+            
+            <div class="card">
+                <h2>Sprint Risk Status</h2>
+                <div id="sprintRisksList"></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Mitigation Strategies</h2>
+            <div id="mitigationList"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE_URL = 'http://localhost:5000/api';
+        
+        // Load data on page load
+        $(document).ready(function() {
+            loadDashboard();
+        });
+        
+        function loadDashboard() {
+            console.log('Loading dashboard data...');
+            loadRiskScore();
+            loadRiskSummary();
+            loadCriticalDefects();
+            loadResourceConstraints();
+            loadDomainRisks();
+            loadSprintRisks();
+            loadMitigationStrategies();
+        }
+        
+        function loadRiskScore() {
+            $.ajax({
+                url: `${API_BASE_URL}/risk-score`,
+                method: 'GET',
+                success: function(data) {
+                    const score = data.overall_score;
+                    const level = data.risk_level;
+                    
+                    $('#overallScore').text(score.toFixed(0)).removeClass().addClass('risk-score ' + level.toLowerCase());
+                    $('#riskLevel').html(`<strong>Risk Level: ${level}</strong>`);
+                    $('#recommendation').text(data.recommendation);
+                },
+                error: function() {
+                    console.error('Failed to load risk score');
+                }
+            });
+        }
+        
+        function loadRiskSummary() {
+            $.ajax({
+                url: `${API_BASE_URL}/risk-summary`,
+                method: 'GET',
+                success: function(data) {
+                    $('#criticalDefects').text(data.critical_defects || 0);
+                    $('#resourceBottlenecks').text(data.resource_bottlenecks || 0);
+                    $('#atRiskSprints').text(data.at_risk_sprints || 0);
+                },
+                error: function() {
+                    console.error('Failed to load risk summary');
+                }
+            });
+        }
+        
+        function loadCriticalDefects() {
+            $.ajax({
+                url: `${API_BASE_URL}/critical-defects?priority=${$('#defectPriority').val()}`,
+                method: 'GET',
+                success: function(data) {
+                    let html = '';
+                    const defects = data.defects.slice(0, 5);
+                    
+                    if (defects.length === 0) {
+                        html = '<p style="color: #666; font-size: 14px;">No critical defects</p>';
+                    } else {
+                        defects.forEach(defect => {
+                            const impactClass = defect.impact.toLowerCase();
+                            html += `
+                                <div class="defect-item ${impactClass}">
+                                    <div class="defect-id">${defect.id}</div>
+                                    <div class="defect-summary">${defect.summary}</div>
+                                    <div>
+                                        <span class="status-badge ${defect.priority.toLowerCase()}">${defect.priority}</span>
+                                        <span style="color: #666; font-size: 12px;">${defect.status}</span>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    }
+                    
+                    $('#criticalDefectsList').html(html);
+                },
+                error: function() {
+                    $('#criticalDefectsList').html('<p class="error">Failed to load defects</p>');
+                }
+            });
+        }
+        
+        function loadResourceConstraints() {
+            $.ajax({
+                url: `${API_BASE_URL}/resource-constraints`,
+                method: 'GET',
+                success: function(data) {
+                    let html = '';
+                    const resources = Object.entries(data.resources).slice(0, 5);
+                    
+                    if (resources.length === 0) {
+                        html = '<p style="color: #666; font-size: 14px;">No resource constraints</p>';
+                    } else {
+                        resources.forEach(([id, resource]) => {
+                            const allocation = resource.allocation || 0;
+                            const isHigh = allocation >= 100 ? 'high' : '';
+                            html += `
+                                <div class="resource-item">
+                                    <span class="resource-name">${resource.name}</span>
+                                    <div class="allocation-bar">
+                                        <div class="allocation-fill ${isHigh}" style="width: ${Math.min(allocation, 100)}%"></div>
+                                    </div>
+                                    <span class="allocation-percent">${allocation}%</span>
+                                </div>
+                            `;
+                        });
+                    }
+                    
+                    $('#resourceConstraintsList').html(html);
+                },
+                error: function() {
+                    $('#resourceConstraintsList').html('<p class="error">Failed to load resources</p>');
+                }
+            });
+        }
+        
+        function loadDomainRisks() {
+            $.ajax({
+                url: `${API_BASE_URL}/domain-risks`,
+                method: 'GET',
+                success: function(data) {
+                    let html = '';
+                    
+                    Object.entries(data).forEach(([domain, risks]) => {
+                        html += `
+                            <div style="margin-bottom: 12px;">
+                                <strong>${domain}</strong>
+                                <div style="font-size: 13px; color: #666;">
+                                    Open: ${risks.open_defects} | Critical: ${risks.critical_items}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    $('#domainRisksList').html(html || '<p style="color: #666;">No domain data</p>');
+                },
+                error: function() {
+                    $('#domainRisksList').html('<p class="error">Failed to load domain risks</p>');
+                }
+            });
+        }
+        
+        function loadSprintRisks() {
+            $.ajax({
+                url: `${API_BASE_URL}/sprint-risks`,
+                method: 'GET',
+                success: function(data) {
+                    let html = '<div class="sprint-grid">';
+                    
+                    (data.sprints || []).forEach(sprint => {
+                        const riskClass = sprint.risk_level.toLowerCase();
+                        html += `
+                            <div class="sprint-card ${riskClass}">
+                                <div class="sprint-id">${sprint.sprint_id}</div>
+                                <div class="sprint-stat">Risk: ${sprint.risk_level}</div>
+                                <div class="sprint-stat">Items: ${sprint.total_items}</div>
+                                <div class="sprint-stat">Critical: ${sprint.critical_items}</div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                    $('#sprintRisksList').html(html);
+                },
+                error: function() {
+                    $('#sprintRisksList').html('<p class="error">Failed to load sprint risks</p>');
+                }
+            });
+        }
+        
+        function loadMitigationStrategies() {
+            $.ajax({
+                url: `${API_BASE_URL}/mitigation-strategies`,
+                method: 'GET',
+                success: function(data) {
+                    let html = '';
+                    
+                    Object.entries(data).forEach(([category, strategies]) => {
+                        html += `<h4 style="color: #667eea; margin-top: 15px; margin-bottom: 8px;">${category.replace(/_/g, ' ').toUpperCase()}</h4>`;
+                        html += '<ul style="margin-left: 20px;">';
+                        strategies.forEach(strategy => {
+                            html += `<li style="margin-bottom: 6px; color: #666;">${strategy}</li>`;
+                        });
+                        html += '</ul>';
+                    });
+                    
+                    $('#mitigationList').html(html);
+                },
+                error: function() {
+                    $('#mitigationList').html('<p class="error">Failed to load mitigation strategies</p>');
+                }
+            });
+        }
+        
+        function applyFilters() {
+            loadCriticalDefects();
+            loadDashboard();
+        }
+        
+        function resetFilters() {
+            $('#defectPriority').val('all');
+            $('#sprintFilter').val('');
+            loadDashboard();
+        }
+        
+        // Auto-refresh every 30 seconds
+        setInterval(function() {
+            console.log('Auto-refreshing dashboard...');
+            loadDashboard();
+        }, 30000);
+    </script>
+</body>
+</html>

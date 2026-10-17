@@ -1,0 +1,64 @@
+source,associate,experience,role,feature,domain,skill,expected_level,current_level
+AXIOM_Competencies,JyothiLakshmikanth,15+,System Architect,E-Key 2W,Architecture,System Design & Architecture,L4,L4
+AXIOM_Competencies,JyothiLakshmikanth,15+,System Architect,E-Key 2W,Architecture,Security Architecture,L4,L3
+AXIOM_Competencies,JyothiLakshmikanth,15+,System Architect,E-Key 2W,Architecture,Cloud Architecture,L3,L3
+AXIOM_Competencies,JyothiLakshmikanth,15+,System Architect,E-Key 2W,Architecture,Mobile Architecture,L3,L2
+AXIOM_Competencies,JyothiLakshmikanth,15+,System Architect,E-Key 2W,Architecture,Vehicle Communication,L3,L2
+AXIOM_Competencies,JyothiLakshmikanth,15+,System Architect,E-Key 2W,Architecture,Design Patterns,L4,L4
+AXIOM_Competencies,bhavya2642-collab,8,Mobile Engineer,E-Key 2W,Mobile,iOS Development,L3,L4
+AXIOM_Competencies,bhavya2642-collab,8,Mobile Engineer,E-Key 2W,Mobile,Android Development,L3,L3
+AXIOM_Competencies,bhavya2642-collab,8,Mobile Engineer,E-Key 2W,Mobile,Mobile Security,L3,L2
+AXIOM_Competencies,bhavya2642-collab,8,Mobile Engineer,E-Key 2W,Mobile,NFC/BLE Protocol,L3,L3
+AXIOM_Competencies,bhavya2642-collab,8,Mobile Engineer,E-Key 2W,Mobile,Cryptography Basics,L2,L2
+AXIOM_Competencies,bhavya2642-collab,8,Mobile Engineer,E-Key 2W,Mobile,API Integration,L3,L4
+AXIOM_Competencies,manjunathan-j,6,Mobile Engineer,E-Key 2W,Mobile,iOS Development,L3,L3
+AXIOM_Competencies,manjunathan-j,6,Mobile Engineer,E-Key 2W,Mobile,UI/UX Implementation,L3,L4
+AXIOM_Competencies,manjunathan-j,6,Mobile Engineer,E-Key 2W,Mobile,Mobile Testing,L2,L2
+AXIOM_Competencies,manjunathan-j,6,Mobile Engineer,E-Key 2W,Mobile,Bluetooth Integration,L2,L2
+AXIOM_Competencies,manjunathan-j,6,Mobile Engineer,E-Key 2W,Mobile,Performance Optimization,L2,L3
+AXIOM_Competencies,Pavi2604,12,Vehicle Software Engineer,E-Key 2W,Vehicle,Vehicle ECU Communication,L4,L4
+AXIOM_Competencies,Pavi2604,12,Vehicle Software Engineer,E-Key 2W,Vehicle,CAN Bus Protocol,L4,L4
+AXIOM_Competencies,Pavi2604,12,Vehicle Software Engineer,E-Key 2W,Vehicle,Vehicle Proximity Sensing,L3,L4
+AXIOM_Competencies,Pavi2604,12,Vehicle Software Engineer,E-Key 2W,Vehicle,Access Control Logic,L3,L3
+AXIOM_Competencies,Pavi2604,12,Vehicle Software Engineer,E-Key 2W,Vehicle,Real-time Systems,L3,L3
+AXIOM_Competencies,Pavi2604,12,Vehicle Software Engineer,E-Key 2W,Vehicle,Low-Power Design,L2,L2
+AXIOM_Competencies,JyothiLakshmikanth,9,Vehicle Software Engineer,E-Key 2W,Vehicle,Vehicle ECU Communication,L3,L3
+AXIOM_Competencies,JyothiLakshmikanth,9,Vehicle Software Engineer,E-Key 2W,Vehicle,Ride Authorization,L2,L2
+AXIOM_Competencies,JyothiLakshmikanth,9,Vehicle Software Engineer,E-Key 2W,Vehicle,Gateway Implementation,L2,L2
+AXIOM_Competencies,JyothiLakshmikanth,9,Vehicle Software Engineer,E-Key 2W,Vehicle,State Management,L3,L3
+AXIOM_Competencies,JyothiLakshmikanth,9,Vehicle Software Engineer,E-Key 2W,Vehicle,Testing & Diagnostics,L2,L2
+AXIOM_Competencies,bhavya2642-collab,7,Cloud Engineer,E-Key 2W,Cloud,Cloud Architecture,L3,L3
+AXIOM_Competencies,bhavya2642-collab,7,Cloud Engineer,E-Key 2W,Cloud,Key Management Service,L3,L2
+AXIOM_Competencies,bhavya2642-collab,7,Cloud Engineer,E-Key 2W,Cloud,API Development,L3,L3
+AXIOM_Competencies,bhavya2642-collab,7,Cloud Engineer,E-Key 2W,Cloud,Database Design,L3,L3
+AXIOM_Competencies,bhavya2642-collab,7,Cloud Engineer,E-Key 2W,Cloud,Cloud Security,L2,L2
+AXIOM_Competencies,bhavya2642-collab,7,Cloud Engineer,E-Key 2W,Cloud,Microservices,L2,L2
+AXIOM_Competencies,manjunathan-j,10,Security Engineer,E-Key 2W,Security,Cryptography,L4,L4
+AXIOM_Competencies,manjunathan-j,10,Security Engineer,E-Key 2W,Security,Security Architecture,L3,L3
+AXIOM_Competencies,manjunathan-j,10,Security Engineer,E-Key 2W,Security,Vehicle Security,L3,L3
+AXIOM_Competencies,manjunathan-j,10,Security Engineer,E-Key 2W,Security,Authentication Protocols,L4,L4
+AXIOM_Competencies,manjunathan-j,10,Security Engineer,E-Key 2W,Security,Secure Key Exchange,L4,L3
+AXIOM_Competencies,manjunathan-j,10,Security Engineer,E-Key 2W,Security,Threat Modeling,L3,L3
+AXIOM_Competencies,Pavi2604,11,QA Engineer,E-Key 2W,QA,Test Planning,L3,L3
+AXIOM_Competencies,Pavi2604,11,QA Engineer,E-Key 2W,QA,Manual Testing,L4,L4
+AXIOM_Competencies,Pavi2604,11,QA Engineer,E-Key 2W,QA,System Integration Testing,L3,L3
+AXIOM_Competencies,Pavi2604,11,QA Engineer,E-Key 2W,QA,Test Case Design,L3,L3
+AXIOM_Competencies,Pavi2604,11,QA Engineer,E-Key 2W,QA,Defect Management,L3,L3
+AXIOM_Competencies,JyothiLakshmikanth,7,QA Automation Engineer,E-Key 2W,QA,Test Automation,L3,L3
+AXIOM_Competencies,JyothiLakshmikanth,7,QA Automation Engineer,E-Key 2W,QA,API Testing,L3,L2
+AXIOM_Competencies,JyothiLakshmikanth,7,QA Automation Engineer,E-Key 2W,QA,Mobile Automation,L2,L2
+AXIOM_Competencies,JyothiLakshmikanth,7,QA Automation Engineer,E-Key 2W,QA,Performance Testing,L2,L2
+AXIOM_Competencies,JyothiLakshmikanth,7,QA Automation Engineer,E-Key 2W,QA,CI/CD Integration,L2,L2
+AXIOM_Competencies,bhavya2642-collab,6,DevOps Engineer,E-Key 2W,DevOps,Infrastructure as Code,L2,L2
+AXIOM_Competencies,bhavya2642-collab,6,DevOps Engineer,E-Key 2W,DevOps,CI/CD Pipeline,L3,L3
+AXIOM_Competencies,bhavya2642-collab,6,DevOps Engineer,E-Key 2W,DevOps,Cloud Deployment,L2,L2
+AXIOM_Competencies,bhavya2642-collab,6,DevOps Engineer,E-Key 2W,DevOps,Monitoring & Logging,L2,L2
+AXIOM_Competencies,bhavya2642-collab,6,DevOps Engineer,E-Key 2W,DevOps,Container Orchestration,L2,L1
+AXIOM_Competencies,manjunathan-j,13,Product Owner,E-Key 2W,Product,Product Strategy,L3,L3
+AXIOM_Competencies,manjunathan-j,13,Product Owner,E-Key 2W,Product,Requirements Gathering,L3,L3
+AXIOM_Competencies,manjunathan-j,13,Product Owner,E-Key 2W,Product,Stakeholder Management,L4,L4
+AXIOM_Competencies,manjunathan-j,13,Product Owner,E-Key 2W,Product,Roadmap Planning,L3,L3
+AXIOM_Competencies,Pavi2604,5,UX Engineer,E-Key 2W,UX,User Research,L2,L2
+AXIOM_Competencies,Pavi2604,5,UX Engineer,E-Key 2W,UX,UI Design,L3,L3
+AXIOM_Competencies,Pavi2604,5,UX Engineer,E-Key 2W,UX,Usability Testing,L2,L2
+AXIOM_Competencies,Pavi2604,5,UX Engineer,E-Key 2W,UX,Mobile Design Patterns,L3,L3

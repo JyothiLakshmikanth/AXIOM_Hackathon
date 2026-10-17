@@ -1,0 +1,391 @@
+{
+  "generated_date": "2026-10-17T18:27:28.464426",
+  "project": "AXIOM E-Key 2W",
+  "summary": {
+    "overall_risk_level": "Medium",
+    "critical_defects": 6,
+    "resource_bottlenecks": 6,
+    "at_risk_sprints": 4
+  },
+  "critical_defects": [
+    {
+      "id": "TWK-101",
+      "summary": "Digital Key Enrollment",
+      "type": "Epic",
+      "status": "Done",
+      "priority": "High",
+      "assignee": "RES-01",
+      "sprint": "SPR-01",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-102",
+      "summary": "Owner authentication",
+      "type": "Story",
+      "status": "Done",
+      "priority": "Critical",
+      "assignee": "RES-02",
+      "sprint": "SPR-01",
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-103",
+      "summary": "Vehicle provisioning",
+      "type": "Story",
+      "status": "Done",
+      "priority": "High",
+      "assignee": "RES-04",
+      "sprint": "SPR-02",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-104",
+      "summary": "Passive unlock",
+      "type": "Story",
+      "status": "In Progress",
+      "priority": "Critical",
+      "assignee": "RES-04",
+      "sprint": "SPR-03",
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-105",
+      "summary": "Proximity decision latency optimization",
+      "type": "Task",
+      "status": "In Progress",
+      "priority": "High",
+      "assignee": "RES-05",
+      "sprint": "SPR-03",
+      "impact": "Medium",
+      "mitigation": "Performance optimization task required"
+    },
+    {
+      "id": "TWK-106",
+      "summary": "Passive lock",
+      "type": "Story",
+      "status": "In Progress",
+      "priority": "High",
+      "assignee": "RES-03",
+      "sprint": "SPR-03",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-107",
+      "summary": "Boundary-zone unlock intermittently fails",
+      "type": "Bug",
+      "status": "Open",
+      "priority": "Critical",
+      "assignee": "RES-04",
+      "sprint": "SPR-03",
+      "impact": "High",
+      "mitigation": "Edge case testing and validation needed"
+    },
+    {
+      "id": "TWK-108",
+      "summary": "Unlock latency exceeds target on low-power phone",
+      "type": "Bug",
+      "status": "Open",
+      "priority": "High",
+      "assignee": "RES-05",
+      "sprint": "SPR-03",
+      "impact": "Medium",
+      "mitigation": "Performance optimization task required"
+    },
+    {
+      "id": "TWK-109",
+      "summary": "Ride authorization",
+      "type": "Story",
+      "status": "In Progress",
+      "priority": "Critical",
+      "assignee": "RES-07",
+      "sprint": "SPR-04",
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-110",
+      "summary": "Shared digital key",
+      "type": "Story",
+      "status": "Done",
+      "priority": "High",
+      "assignee": "RES-06",
+      "sprint": "SPR-04",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-111",
+      "summary": "Key revocation",
+      "type": "Story",
+      "status": "In Progress",
+      "priority": "Critical",
+      "assignee": "RES-06",
+      "sprint": "SPR-05",
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-112",
+      "summary": "Revoked key remains accepted during vehicle cache window",
+      "type": "Bug",
+      "status": "Open",
+      "priority": "Critical",
+      "assignee": "RES-07",
+      "sprint": "SPR-05",
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-113",
+      "summary": "Revocation propagation optimization",
+      "type": "Task",
+      "status": "In Progress",
+      "priority": "High",
+      "assignee": "RES-06",
+      "sprint": "SPR-05",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-114",
+      "summary": "Security event logging",
+      "type": "Story",
+      "status": "In Progress",
+      "priority": "High",
+      "assignee": "RES-07",
+      "sprint": "SPR-05",
+      "impact": "High",
+      "mitigation": "Prioritize security review and patching"
+    },
+    {
+      "id": "TWK-118",
+      "summary": "Offline grace mode",
+      "type": "Story",
+      "status": "To Do",
+      "priority": "High",
+      "assignee": "RES-05",
+      "sprint": "SPR-07",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-119",
+      "summary": "QA capacity constrained during Alpha exit",
+      "type": "Risk",
+      "status": "Open",
+      "priority": "High",
+      "assignee": "RES-08",
+      "sprint": "SPR-03",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-120",
+      "summary": "Security engineer allocation constrained in Sprint 5",
+      "type": "Risk",
+      "status": "Open",
+      "priority": "High",
+      "assignee": "RES-07",
+      "sprint": "SPR-05",
+      "impact": "High",
+      "mitigation": "Prioritize security review and patching"
+    }
+  ],
+  "resource_constraints": {
+    "RES-01": {
+      "name": "Anika Rao",
+      "role": "System Architect",
+      "domain": "Architecture",
+      "allocation": 100,
+      "location": "Bengaluru",
+      "risk_level": "High",
+      "recommendations": [
+        "Consider task redistribution",
+        "Monitor for burnout and quality issues"
+      ]
+    },
+    "RES-03": {
+      "name": "Meera Shah",
+      "role": "Mobile Engineer",
+      "domain": "Mobile",
+      "allocation": 90,
+      "location": "Pune",
+      "risk_level": "Medium",
+      "recommendations": [
+        "Limit new assignments",
+        "Monitor capacity closely"
+      ]
+    },
+    "RES-04": {
+      "name": "Kiran Das",
+      "role": "Vehicle Software Engineer",
+      "domain": "Vehicle",
+      "allocation": 100,
+      "location": "Bengaluru",
+      "risk_level": "High",
+      "recommendations": [
+        "Consider task redistribution",
+        "Monitor for burnout and quality issues"
+      ]
+    },
+    "RES-05": {
+      "name": "Naveen Kumar",
+      "role": "Vehicle Software Engineer",
+      "domain": "Vehicle",
+      "allocation": 90,
+      "location": "Bengaluru",
+      "risk_level": "Medium",
+      "recommendations": [
+        "Limit new assignments",
+        "Monitor capacity closely"
+      ]
+    },
+    "RES-08": {
+      "name": "Sonal Iyer",
+      "role": "QA Engineer",
+      "domain": "QA",
+      "allocation": 100,
+      "location": "Bengaluru",
+      "risk_level": "High",
+      "recommendations": [
+        "Consider task redistribution",
+        "Monitor for burnout and quality issues"
+      ]
+    },
+    "RES-09": {
+      "name": "Vikram Joshi",
+      "role": "QA Automation Engineer",
+      "domain": "QA",
+      "allocation": 90,
+      "location": "Pune",
+      "risk_level": "Medium",
+      "recommendations": [
+        "Limit new assignments",
+        "Monitor capacity closely"
+      ]
+    }
+  },
+  "domain_risks": {
+    "Unknown": {
+      "open_defects": 12,
+      "critical_items": 6,
+      "assigned_resources": [
+        "RES-01",
+        "RES-02",
+        "RES-04",
+        "RES-05",
+        "RES-03",
+        "RES-07",
+        "RES-06",
+        "RES-08"
+      ],
+      "capacity_status": "Unknown"
+    }
+  },
+  "sprint_risks": [
+    {
+      "sprint_id": "SPR-01",
+      "total_items": 2,
+      "open_items": 0,
+      "critical_items": 1,
+      "risk_level": "Critical",
+      "focus_areas": [
+        "Critical items resolution"
+      ]
+    },
+    {
+      "sprint_id": "SPR-02",
+      "total_items": 1,
+      "open_items": 0,
+      "critical_items": 0,
+      "risk_level": "Low",
+      "focus_areas": [
+        "Regular feature development"
+      ]
+    },
+    {
+      "sprint_id": "SPR-03",
+      "total_items": 6,
+      "open_items": 6,
+      "critical_items": 2,
+      "risk_level": "Critical",
+      "focus_areas": [
+        "Critical items resolution",
+        "Defect fixing"
+      ]
+    },
+    {
+      "sprint_id": "SPR-04",
+      "total_items": 2,
+      "open_items": 1,
+      "critical_items": 1,
+      "risk_level": "Critical",
+      "focus_areas": [
+        "Critical items resolution"
+      ]
+    },
+    {
+      "sprint_id": "SPR-05",
+      "total_items": 5,
+      "open_items": 5,
+      "critical_items": 2,
+      "risk_level": "Critical",
+      "focus_areas": [
+        "Critical items resolution",
+        "Defect fixing",
+        "Completion acceleration"
+      ]
+    },
+    {
+      "sprint_id": "SPR-06",
+      "total_items": 3,
+      "open_items": 0,
+      "critical_items": 0,
+      "risk_level": "Low",
+      "focus_areas": [
+        "Regular feature development"
+      ]
+    },
+    {
+      "sprint_id": "SPR-07",
+      "total_items": 1,
+      "open_items": 0,
+      "critical_items": 0,
+      "risk_level": "Low",
+      "focus_areas": [
+        "Regular feature development"
+      ]
+    }
+  ],
+  "mitigation_strategies": {
+    "resource_management": [
+      "Balance workload across teams",
+      "Cross-train team members for critical skills",
+      "Prioritize security engineer allocation for Sprints 4-5",
+      "Plan QA capacity expansion before Alpha exit"
+    ],
+    "defect_management": [
+      "Implement boundary-zone testing protocol",
+      "Add low-power phone validation to test matrix",
+      "Establish revocation cache invalidation process",
+      "Deploy security event audit logging"
+    ],
+    "schedule_management": [
+      "Buffer time in PI-2 for latency optimization",
+      "Pre-allocate security resources for PI-3",
+      "Front-load QA activities in PI-2 and PI-3",
+      "Plan release hardening activities early in PI-4"
+    ],
+    "technical_mitigations": [
+      "Implement robust proximity decision algorithm",
+      "Add firmware cache invalidation hooks",
+      "Enhance security audit trail capabilities",
+      "Develop offline synchronization mechanism"
+    ]
+  }
+}

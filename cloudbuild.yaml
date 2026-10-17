@@ -2,59 +2,58 @@
 # Deploy to GCP Cloud Run
 
 steps:
-  # Step 1: Build Docker image
+  # Build and push to the pre-provisioned Artifact Registry repository.
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/axiom-orchestrator:$BRANCH_NAME-$SHORT_SHA'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/axiom-orchestrator:latest'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom/axiom-orchestrator:$BUILD_ID'
       - '-f'
-      - 'Dockerfile.new'
+      - 'Dockerfile'
       - '.'
 
-  # Step 2: Push image to GCR
+  # Push image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/axiom-orchestrator:$BRANCH_NAME-$SHORT_SHA'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom/axiom-orchestrator:$BUILD_ID'
 
   # Step 3: Deploy to Cloud Run
-  - name: 'gcr.io/cloud-builders/gke-deploy'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
     id: 'deploy-cloud-run'
+    entrypoint: 'gcloud'
     args:
-      - run
-      - deploy
-      - axiom-orchestrator-$BRANCH_NAME
-      - --image=gcr.io/$PROJECT_ID/axiom-orchestrator:$BRANCH_NAME-$SHORT_SHA
-      - --region=us-central1
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}-${_ENVIRONMENT}'
+      - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom/axiom-orchestrator:$BUILD_ID'
+      - '--region=${_REGION}'
       - --platform=managed
       - --memory=2Gi
       - --cpu=2
       - --timeout=3600
-      - --max-instances=10
-      - --min-instances=1
+      - --max-instances=1
+      - --min-instances=0
       - --no-allow-unauthenticated
-      - --set-env-vars=ENVIRONMENT=$BRANCH_NAME,GOOGLE_CLOUD_PROJECT=$PROJECT_ID
+      - --set-env-vars=ENVIRONMENT=${_ENVIRONMENT},GOOGLE_CLOUD_PROJECT=$PROJECT_ID
       - --service-account=axiom-orchestrator@$PROJECT_ID.iam.gserviceaccount.com
 
   # Step 4: Verify deployment
-  - name: 'gcr.io/cloud-builders/gke-deploy'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
     id: 'verify-deployment'
+    entrypoint: 'gcloud'
     args:
-      - run
-      - services
-      - describe
-      - axiom-orchestrator-$BRANCH_NAME
-      - --region=us-central1
+      - 'run'
+      - 'services'
+      - 'describe'
+      - '${_SERVICE_NAME}-${_ENVIRONMENT}'
+      - '--region=${_REGION}'
 
-# Image to be pushed to GCR
+# Image to be pushed to Artifact Registry
 images:
-  - 'gcr.io/$PROJECT_ID/axiom-orchestrator:$BRANCH_NAME-$SHORT_SHA'
-  - 'gcr.io/$PROJECT_ID/axiom-orchestrator:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom/axiom-orchestrator:$BUILD_ID'
 
 # Build timeout
 timeout: '3600s'
@@ -63,13 +62,11 @@ timeout: '3600s'
 substitutions:
   _REGION: 'us-central1'
   _SERVICE_NAME: 'axiom-orchestrator'
+  _ENVIRONMENT: 'prod'
 
 # Options
 options:
-  machineType: 'N1_HIGHCPU_8'
+  machineType: 'E2_MEDIUM'
   logging: CLOUD_LOGGING_ONLY
   
-# Triggers on push to main or develop branches
-onFailure:
-  - 'NOTIFY'
 
