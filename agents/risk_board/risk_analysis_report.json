@@ -1,520 +1,204 @@
 {
-  "generated_date": "2026-10-18T01:35:44.844247",
-  "project": "AXIOM E-Key 2W Digital Key Platform",
-  "repository": "https://github.com/JyothiLakshmikanth/EKey2W",
+  "generated_date": "2026-10-17T18:27:28.464426",
+  "project": "AXIOM E-Key 2W",
   "summary": {
-    "overall_risk_level": "Medium-High",
-    "critical_defects": 5,
-    "resource_bottlenecks": 8,
+    "overall_risk_level": "Medium",
+    "critical_defects": 6,
+    "resource_bottlenecks": 6,
     "at_risk_sprints": 4
-  },
-  "temporal_risks": {
-    "yesterday_risks": [
-      {
-        "id": "TWK-101",
-        "title": "Digital Key Enrollment",
-        "sprint": "SPR-01",
-        "assignee": "JyothiLakshmikanth (RES-01)",
-        "status": "\u2705 Verified & Done",
-        "priority": "High",
-        "threat": "Medium-High (Schedule Risk)",
-        "resolution": "Delivered in SPR-01 (168h logged, Owner Authentication)",
-        "mitigation": "Prioritize code review on Owner Authentication & enforce CI gating"
-      },
-      {
-        "id": "TWK-102",
-        "title": "Owner Authentication",
-        "sprint": "SPR-01",
-        "assignee": "bhavya2642-collab (RES-02)",
-        "status": "\u2705 Verified & Done",
-        "priority": "Critical",
-        "threat": "High (Sprint Critical Path Delivery Blocker)",
-        "resolution": "Delivered in SPR-01 (40h logged, Mobile Auth Service)",
-        "mitigation": "Refactor session handshake & clean background lifecycle coroutine listeners"
-      },
-      {
-        "id": "TWK-103",
-        "title": "Vehicle Provisioning",
-        "sprint": "SPR-02",
-        "assignee": "Pavi2604 (RES-04)",
-        "status": "\u2705 Verified & Done",
-        "priority": "High",
-        "threat": "Medium-High (Schedule Risk)",
-        "resolution": "Delivered in SPR-02 (56h logged, Vehicle Gateway)",
-        "mitigation": "Apply priority CAN-FD arbitration ID filtering & buffer overrun protection"
-      },
-      {
-        "id": "TWK-110",
-        "title": "Shared Digital Key",
-        "sprint": "SPR-04",
-        "assignee": "bhavya2642-collab (RES-06)",
-        "status": "\u2705 Verified & Done",
-        "priority": "High",
-        "threat": "Medium-High (Schedule Risk)",
-        "resolution": "Delivered in SPR-04 (56h logged, Key Management Service)",
-        "mitigation": "Prioritize code review on Key Management Service & enforce CI gating"
-      }
-    ],
-    "yesterday_metrics": {
-      "total_resolved": 4,
-      "points_delivered": 55,
-      "hours_logged": 320,
-      "regression_rate": "0%",
-      "safeguards": [
-        "**Key Management Service Baseline Locked**: Validated & closed across items (TWK-110) with regression tests enforced in CI.",
-        "**Mobile Auth Service Baseline Locked**: Validated & closed across items (TWK-102) with regression tests enforced in CI.",
-        "**Owner Authentication Baseline Locked**: Validated & closed across items (TWK-101) with regression tests enforced in CI.",
-        "**Vehicle Gateway Baseline Locked**: Validated & closed across items (TWK-103) with regression tests enforced in CI."
-      ]
-    },
-    "today_risks": [
-      {
-        "id": "TWK-104",
-        "title": "Passive Unlock",
-        "type": "Story",
-        "sprint": "SPR-03",
-        "assignee": "Pavi2604 (RES-04)",
-        "status": "In Progress",
-        "priority": "Critical",
-        "impact": "High (Sprint Critical Path Delivery Blocker)",
-        "mitigation": "Apply dual-threshold hysteresis debounce filter & expand edge test coverage"
-      },
-      {
-        "id": "TWK-105",
-        "title": "Proximity Decision Latency Optimization",
-        "type": "Task",
-        "sprint": "SPR-03",
-        "assignee": "JyothiLakshmikanth (RES-05)",
-        "status": "In Progress",
-        "priority": "High",
-        "impact": "Medium-High (QoS Latency SLA Breach)",
-        "mitigation": "Apply dual-threshold hysteresis debounce filter & expand edge test coverage"
-      },
-      {
-        "id": "TWK-106",
-        "title": "Passive Lock",
-        "type": "Story",
-        "sprint": "SPR-03",
-        "assignee": "manjunathan-j (RES-03)",
-        "status": "In Progress",
-        "priority": "High",
-        "impact": "Medium-High (Schedule Risk)",
-        "mitigation": "Refactor session handshake & clean background lifecycle coroutine listeners"
-      },
-      {
-        "id": "TWK-107",
-        "title": "Boundary-Zone Unlock Intermittently Fails",
-        "type": "Bug",
-        "sprint": "SPR-03",
-        "assignee": "Pavi2604 (RES-04)",
-        "status": "Open",
-        "priority": "Critical",
-        "impact": "Critical (ASIL-B Safety Violation / Milestone Blocker)",
-        "mitigation": "Apply dual-threshold hysteresis debounce filter & expand edge test coverage"
-      },
-      {
-        "id": "TWK-108",
-        "title": "Unlock Latency Exceeds Target on Low-Power Phone",
-        "type": "Bug",
-        "sprint": "SPR-03",
-        "assignee": "JyothiLakshmikanth (RES-05)",
-        "status": "Open",
-        "priority": "High",
-        "impact": "Medium-High (QoS Latency SLA Breach)",
-        "mitigation": "Optimize async polling, BLE buffer allocations & packet queuing"
-      },
-      {
-        "id": "TWK-109",
-        "title": "Ride Authorization",
-        "type": "Story",
-        "sprint": "SPR-04",
-        "assignee": "manjunathan-j (RES-07)",
-        "status": "In Progress",
-        "priority": "Critical",
-        "impact": "High (Sprint Critical Path Delivery Blocker)",
-        "mitigation": "Refactor session handshake & clean background lifecycle coroutine listeners"
-      },
-      {
-        "id": "TWK-111",
-        "title": "Key Revocation",
-        "type": "Story",
-        "sprint": "SPR-05",
-        "assignee": "bhavya2642-collab (RES-06)",
-        "status": "In Progress",
-        "priority": "Critical",
-        "impact": "High (Sprint Critical Path Delivery Blocker)",
-        "mitigation": "Implement event-driven push invalidation hook & local secure element blacklist"
-      },
-      {
-        "id": "TWK-112",
-        "title": "Revoked Key Remains Accepted During Vehicle Cache Window",
-        "type": "Bug",
-        "sprint": "SPR-05",
-        "assignee": "Pavi2604 (RES-04)",
-        "status": "Open",
-        "priority": "Critical",
-        "impact": "Critical (ASIL-B Safety Violation / Milestone Blocker)",
-        "mitigation": "Implement event-driven push invalidation hook & local secure element blacklist"
-      },
-      {
-        "id": "TWK-119",
-        "title": "QA Capacity Constrained During Alpha Exit",
-        "type": "Risk",
-        "sprint": "SPR-03",
-        "assignee": "Pavi2604 (RES-08)",
-        "status": "Open",
-        "priority": "High",
-        "impact": "High (Resource / Quality Gate Risk)",
-        "mitigation": "Offload manual execution to automated HIL rigs & cross-train automation engineers"
-      },
-      {
-        "id": "TWK-120",
-        "title": "Security Engineer Allocation Constrained in Sprint 5",
-        "type": "Risk",
-        "sprint": "SPR-05",
-        "assignee": "manjunathan-j (RES-07)",
-        "status": "Open",
-        "priority": "High",
-        "impact": "High (Security Vulnerability / Access Risk)",
-        "mitigation": "Conduct cryptographic review, audit logging & enforce HSM state validation"
-      }
-    ],
-    "today_metrics": {
-      "active_defects_count": 8,
-      "overloaded_engineers_count": 8,
-      "critical_path_items": 10,
-      "sprint_health": "At Risk"
-    },
-    "today_resource_overloads": [
-      {
-        "associate": "JyothiLakshmikanth",
-        "role": "System Architect",
-        "domain": "Architecture",
-        "allocation": 100,
-        "status": "\ud83d\udd34 Overloaded"
-      },
-      {
-        "associate": "bhavya2642-collab",
-        "role": "Mobile Engineer",
-        "domain": "Mobile",
-        "allocation": 80,
-        "status": "\ud83d\udfe1 Near Capacity"
-      },
-      {
-        "associate": "manjunathan-j",
-        "role": "Mobile Engineer",
-        "domain": "Mobile",
-        "allocation": 90,
-        "status": "\ud83d\udd34 Overloaded"
-      },
-      {
-        "associate": "Pavi2604",
-        "role": "Vehicle Software Engineer",
-        "domain": "Vehicle",
-        "allocation": 100,
-        "status": "\ud83d\udd34 Overloaded"
-      },
-      {
-        "associate": "JyothiLakshmikanth",
-        "role": "Vehicle Software Engineer",
-        "domain": "Vehicle",
-        "allocation": 90,
-        "status": "\ud83d\udd34 Overloaded"
-      },
-      {
-        "associate": "bhavya2642-collab",
-        "role": "Cloud Engineer",
-        "domain": "Cloud",
-        "allocation": 80,
-        "status": "\ud83d\udfe1 Near Capacity"
-      },
-      {
-        "associate": "Pavi2604",
-        "role": "QA Engineer",
-        "domain": "QA",
-        "allocation": 100,
-        "status": "\ud83d\udd34 Overloaded"
-      },
-      {
-        "associate": "JyothiLakshmikanth",
-        "role": "QA Automation Engineer",
-        "domain": "QA",
-        "allocation": 90,
-        "status": "\ud83d\udd34 Overloaded"
-      }
-    ],
-    "today_associate_aggregates": {
-      "JyothiLakshmikanth": "280% (System Architect (100%), Vehicle Software Engineer (90%), QA Automation Engineer (90%))",
-      "bhavya2642-collab": "220% (Mobile Engineer (80%), Cloud Engineer (80%), DevOps Engineer (60%))",
-      "manjunathan-j": "210% (Mobile Engineer (90%), Security Engineer (70%), Product Owner (50%))",
-      "Pavi2604": "250% (Vehicle Software Engineer (100%), QA Engineer (100%), UX Engineer (50%))"
-    },
-    "today_mitigations": [
-      "**Workload Relief for manjunathan-j**: Rebalance secondary tasks/QA execution to prevent burnout and safeguard focus on TWK-106 (Passive Lock), TWK-109 (Ride Authorization), TWK-120 (Security Engineer Allocation Constrained in Sprint 5).",
-      "**Workload Relief for JyothiLakshmikanth**: Rebalance secondary tasks/QA execution to prevent burnout and safeguard focus on TWK-105 (Proximity Decision Latency Optimization), TWK-108 (Unlock Latency Exceeds Target on Low-Power Phone).",
-      "**Workload Relief for Pavi2604**: Rebalance secondary tasks/QA execution to prevent burnout and safeguard focus on TWK-104 (Passive Unlock), TWK-107 (Boundary-Zone Unlock Intermittently Fails), TWK-112 (Revoked Key Remains Accepted During Vehicle Cache Window), TWK-119 (QA Capacity Constrained During Alpha Exit).",
-      "**Immediate Safety/Delivery Action for TWK-104 (Passive Unlock)**: Apply dual-threshold hysteresis debounce filter & expand edge test coverage.",
-      "**Immediate Safety/Delivery Action for TWK-107 (Boundary-Zone Unlock Intermittently Fails)**: Apply dual-threshold hysteresis debounce filter & expand edge test coverage.",
-      "**Immediate Safety/Delivery Action for TWK-109 (Ride Authorization)**: Refactor session handshake & clean background lifecycle coroutine listeners.",
-      "**Immediate Safety/Delivery Action for TWK-111 (Key Revocation)**: Implement event-driven push invalidation hook & local secure element blacklist.",
-      "**Immediate Safety/Delivery Action for TWK-112 (Revoked Key Remains Accepted During Vehicle Cache Window)**: Implement event-driven push invalidation hook & local secure element blacklist."
-    ],
-    "tomorrow_risks": [
-      {
-        "milestone": "MS-03 (SPR-04)",
-        "id": "TWK-109",
-        "title": "Ride Authorization",
-        "threat": "Upcoming story in Authorization Service; threatens milestone exit criteria if unaddressed.",
-        "owner": "manjunathan-j (RES-07)",
-        "preemptive_strategy": "Refactor session handshake & clean background lifecycle coroutine listeners"
-      },
-      {
-        "milestone": "MS-03 (SPR-04)",
-        "id": "TWK-110",
-        "title": "Shared Digital Key",
-        "threat": "Upcoming story in Key Management Service; threatens milestone exit criteria if unaddressed.",
-        "owner": "bhavya2642-collab (RES-06)",
-        "preemptive_strategy": "Prioritize code review on Key Management Service & enforce CI gating"
-      },
-      {
-        "milestone": "MS-03 (SPR-05)",
-        "id": "TWK-111",
-        "title": "Key Revocation",
-        "threat": "Upcoming story in Key Management Service; threatens milestone exit criteria if unaddressed.",
-        "owner": "bhavya2642-collab (RES-06)",
-        "preemptive_strategy": "Implement event-driven push invalidation hook & local secure element blacklist"
-      },
-      {
-        "milestone": "MS-03 (SPR-05)",
-        "id": "TWK-112",
-        "title": "Revoked Key Remains Accepted During Vehicle Cache Window",
-        "threat": "Upcoming bug in Vehicle Gateway; threatens milestone exit criteria if unaddressed.",
-        "owner": "Pavi2604 (RES-04)",
-        "preemptive_strategy": "Implement event-driven push invalidation hook & local secure element blacklist"
-      },
-      {
-        "milestone": "MS-03 (SPR-05)",
-        "id": "TWK-113",
-        "title": "Revocation Propagation Optimization",
-        "threat": "Upcoming task in Key Management Service; threatens milestone exit criteria if unaddressed.",
-        "owner": "bhavya2642-collab (RES-06)",
-        "preemptive_strategy": "Implement event-driven push invalidation hook & local secure element blacklist"
-      },
-      {
-        "milestone": "MS-03 (SPR-05)",
-        "id": "TWK-114",
-        "title": "Security Event Logging",
-        "threat": "Upcoming story in Security Service; threatens milestone exit criteria if unaddressed.",
-        "owner": "manjunathan-j (RES-07)",
-        "preemptive_strategy": "Conduct cryptographic review, audit logging & enforce HSM state validation"
-      },
-      {
-        "milestone": "MS-04 (SPR-07)",
-        "id": "TWK-118",
-        "title": "Offline Grace Mode",
-        "threat": "Upcoming story in Vehicle Gateway; threatens milestone exit criteria if unaddressed.",
-        "owner": "JyothiLakshmikanth (RES-05)",
-        "preemptive_strategy": "Apply priority CAN-FD arbitration ID filtering & buffer overrun protection"
-      },
-      {
-        "milestone": "MS-03 (SPR-05)",
-        "id": "TWK-120",
-        "title": "Security Engineer Allocation Constrained in Sprint 5",
-        "threat": "Upcoming risk in Security; threatens milestone exit criteria if unaddressed.",
-        "owner": "manjunathan-j (RES-07)",
-        "preemptive_strategy": "Conduct cryptographic review, audit logging & enforce HSM state validation"
-      }
-    ],
-    "tomorrow_metrics": {
-      "horizon_risks_count": 8,
-      "next_safety_gate": "Alpha Exit Gate",
-      "days_remaining": 13,
-      "upcoming_pi_focus": "PI-2: Passive Access & Authorization"
-    },
-    "pi_roadmap": [
-      {
-        "Program Increment": "PI-1: Foundation & Digital Enrollment",
-        "Milestone": "MS-01",
-        "Focus": "MVP Foundation & User Enrollment",
-        "Quality Gate": "Enrollment & Vehicle Provisioning Complete",
-        "Status": "Completed",
-        "Risk Profile": "\ud83d\udfe2 Low (Initial product foundation with owner authentication and vehicle pairing)"
-      },
-      {
-        "Program Increment": "PI-2: Passive Access & Authorization",
-        "Milestone": "MS-02",
-        "Focus": "Passive Unlock/Lock & Proximity",
-        "Quality Gate": "Passive Access & Latency SLA Met",
-        "Status": "In Progress",
-        "Risk Profile": "\ud83d\udd34 High (Core passive access with latency optimization and boundary zone handling)"
-      },
-      {
-        "Program Increment": "PI-3: Shared Key & Revocation",
-        "Milestone": "MS-03",
-        "Focus": "Key Sharing & Revocation",
-        "Quality Gate": "Shared Keys + Revocation + Security Events",
-        "Status": "Planned",
-        "Risk Profile": "\ud83d\udd34 High (Shared key distribution with secure revocation and security logging)"
-      },
-      {
-        "Program Increment": "PI-4: Release Hardening & Deployment",
-        "Milestone": "MS-04",
-        "Focus": "Release Readiness & Offline",
-        "Quality Gate": "Core Features + QA Exit Criteria Met",
-        "Status": "Planned",
-        "Risk Profile": "\ud83d\udfe1 Medium (Offline grace mode and final release hardening)"
-      }
-    ]
   },
   "critical_defects": [
     {
+      "id": "TWK-101",
+      "summary": "Digital Key Enrollment",
+      "type": "Epic",
+      "status": "Done",
+      "priority": "High",
+      "assignee": "RES-01",
+      "sprint": "SPR-01",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-102",
+      "summary": "Owner authentication",
+      "type": "Story",
+      "status": "Done",
+      "priority": "Critical",
+      "assignee": "RES-02",
+      "sprint": "SPR-01",
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-103",
+      "summary": "Vehicle provisioning",
+      "type": "Story",
+      "status": "Done",
+      "priority": "High",
+      "assignee": "RES-04",
+      "sprint": "SPR-02",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
       "id": "TWK-104",
-      "summary": "Passive Unlock",
+      "summary": "Passive unlock",
       "type": "Story",
       "status": "In Progress",
       "priority": "Critical",
-      "assignee": "Pavi2604 (RES-04)",
+      "assignee": "RES-04",
       "sprint": "SPR-03",
-      "impact": "High (Sprint Critical Path Delivery Blocker)",
-      "mitigation": "Apply dual-threshold hysteresis debounce filter & expand edge test coverage"
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
     },
     {
       "id": "TWK-105",
-      "summary": "Proximity Decision Latency Optimization",
+      "summary": "Proximity decision latency optimization",
       "type": "Task",
       "status": "In Progress",
       "priority": "High",
-      "assignee": "JyothiLakshmikanth (RES-05)",
+      "assignee": "RES-05",
       "sprint": "SPR-03",
-      "impact": "Medium-High (QoS Latency SLA Breach)",
-      "mitigation": "Apply dual-threshold hysteresis debounce filter & expand edge test coverage"
+      "impact": "Medium",
+      "mitigation": "Performance optimization task required"
     },
     {
       "id": "TWK-106",
-      "summary": "Passive Lock",
+      "summary": "Passive lock",
       "type": "Story",
       "status": "In Progress",
       "priority": "High",
-      "assignee": "manjunathan-j (RES-03)",
+      "assignee": "RES-03",
       "sprint": "SPR-03",
-      "impact": "Medium-High (Schedule Risk)",
-      "mitigation": "Refactor session handshake & clean background lifecycle coroutine listeners"
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
     },
     {
       "id": "TWK-107",
-      "summary": "Boundary-Zone Unlock Intermittently Fails",
+      "summary": "Boundary-zone unlock intermittently fails",
       "type": "Bug",
       "status": "Open",
       "priority": "Critical",
-      "assignee": "Pavi2604 (RES-04)",
+      "assignee": "RES-04",
       "sprint": "SPR-03",
-      "impact": "Critical (ASIL-B Safety Violation / Milestone Blocker)",
-      "mitigation": "Apply dual-threshold hysteresis debounce filter & expand edge test coverage"
+      "impact": "High",
+      "mitigation": "Edge case testing and validation needed"
     },
     {
       "id": "TWK-108",
-      "summary": "Unlock Latency Exceeds Target on Low-Power Phone",
+      "summary": "Unlock latency exceeds target on low-power phone",
       "type": "Bug",
       "status": "Open",
       "priority": "High",
-      "assignee": "JyothiLakshmikanth (RES-05)",
+      "assignee": "RES-05",
       "sprint": "SPR-03",
-      "impact": "Medium-High (QoS Latency SLA Breach)",
-      "mitigation": "Optimize async polling, BLE buffer allocations & packet queuing"
+      "impact": "Medium",
+      "mitigation": "Performance optimization task required"
     },
     {
       "id": "TWK-109",
-      "summary": "Ride Authorization",
+      "summary": "Ride authorization",
       "type": "Story",
       "status": "In Progress",
       "priority": "Critical",
-      "assignee": "manjunathan-j (RES-07)",
+      "assignee": "RES-07",
       "sprint": "SPR-04",
-      "impact": "High (Sprint Critical Path Delivery Blocker)",
-      "mitigation": "Refactor session handshake & clean background lifecycle coroutine listeners"
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
+    },
+    {
+      "id": "TWK-110",
+      "summary": "Shared digital key",
+      "type": "Story",
+      "status": "Done",
+      "priority": "High",
+      "assignee": "RES-06",
+      "sprint": "SPR-04",
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
     },
     {
       "id": "TWK-111",
-      "summary": "Key Revocation",
+      "summary": "Key revocation",
       "type": "Story",
       "status": "In Progress",
       "priority": "Critical",
-      "assignee": "bhavya2642-collab (RES-06)",
+      "assignee": "RES-06",
       "sprint": "SPR-05",
-      "impact": "High (Sprint Critical Path Delivery Blocker)",
-      "mitigation": "Implement event-driven push invalidation hook & local secure element blacklist"
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
     },
     {
       "id": "TWK-112",
-      "summary": "Revoked Key Remains Accepted During Vehicle Cache Window",
+      "summary": "Revoked key remains accepted during vehicle cache window",
       "type": "Bug",
       "status": "Open",
       "priority": "Critical",
-      "assignee": "Pavi2604 (RES-04)",
+      "assignee": "RES-07",
       "sprint": "SPR-05",
-      "impact": "Critical (ASIL-B Safety Violation / Milestone Blocker)",
-      "mitigation": "Implement event-driven push invalidation hook & local secure element blacklist"
+      "impact": "High",
+      "mitigation": "Standard defect resolution process"
     },
     {
       "id": "TWK-113",
-      "summary": "Revocation Propagation Optimization",
+      "summary": "Revocation propagation optimization",
       "type": "Task",
       "status": "In Progress",
       "priority": "High",
-      "assignee": "bhavya2642-collab (RES-06)",
+      "assignee": "RES-06",
       "sprint": "SPR-05",
-      "impact": "High (Security Vulnerability / Access Risk)",
-      "mitigation": "Implement event-driven push invalidation hook & local secure element blacklist"
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
     },
     {
       "id": "TWK-114",
-      "summary": "Security Event Logging",
+      "summary": "Security event logging",
       "type": "Story",
       "status": "In Progress",
       "priority": "High",
-      "assignee": "manjunathan-j (RES-07)",
+      "assignee": "RES-07",
       "sprint": "SPR-05",
-      "impact": "High (Security Vulnerability / Access Risk)",
-      "mitigation": "Conduct cryptographic review, audit logging & enforce HSM state validation"
+      "impact": "High",
+      "mitigation": "Prioritize security review and patching"
     },
     {
       "id": "TWK-118",
-      "summary": "Offline Grace Mode",
+      "summary": "Offline grace mode",
       "type": "Story",
       "status": "To Do",
       "priority": "High",
-      "assignee": "JyothiLakshmikanth (RES-05)",
+      "assignee": "RES-05",
       "sprint": "SPR-07",
-      "impact": "Medium-High (Schedule Risk)",
-      "mitigation": "Apply priority CAN-FD arbitration ID filtering & buffer overrun protection"
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
     },
     {
       "id": "TWK-119",
-      "summary": "QA Capacity Constrained During Alpha Exit",
+      "summary": "QA capacity constrained during Alpha exit",
       "type": "Risk",
       "status": "Open",
       "priority": "High",
-      "assignee": "Pavi2604 (RES-08)",
+      "assignee": "RES-08",
       "sprint": "SPR-03",
-      "impact": "High (Resource / Quality Gate Risk)",
-      "mitigation": "Offload manual execution to automated HIL rigs & cross-train automation engineers"
+      "impact": "Medium",
+      "mitigation": "Standard defect resolution process"
     },
     {
       "id": "TWK-120",
-      "summary": "Security Engineer Allocation Constrained in Sprint 5",
+      "summary": "Security engineer allocation constrained in Sprint 5",
       "type": "Risk",
       "status": "Open",
       "priority": "High",
-      "assignee": "manjunathan-j (RES-07)",
+      "assignee": "RES-07",
       "sprint": "SPR-05",
-      "impact": "High (Security Vulnerability / Access Risk)",
-      "mitigation": "Conduct cryptographic review, audit logging & enforce HSM state validation"
+      "impact": "High",
+      "mitigation": "Prioritize security review and patching"
     }
   ],
   "resource_constraints": {
-    "GHA-01_Architecture": {
-      "resource_id": "GHA-01",
-      "name": "JyothiLakshmikanth",
+    "RES-01": {
+      "name": "Anika Rao",
       "role": "System Architect",
       "domain": "Architecture",
       "allocation": 100,
@@ -525,19 +209,8 @@
         "Monitor for burnout and quality issues"
       ]
     },
-    "GHA-02_Mobile": {
-      "resource_id": "GHA-02",
-      "name": "bhavya2642-collab",
-      "role": "Mobile Engineer",
-      "domain": "Mobile",
-      "allocation": 80,
-      "location": "Bengaluru",
-      "risk_level": "Medium",
-      "recommendations": []
-    },
-    "GHA-03_Mobile": {
-      "resource_id": "GHA-03",
-      "name": "manjunathan-j",
+    "RES-03": {
+      "name": "Meera Shah",
       "role": "Mobile Engineer",
       "domain": "Mobile",
       "allocation": 90,
@@ -548,9 +221,8 @@
         "Monitor capacity closely"
       ]
     },
-    "GHA-04_Vehicle": {
-      "resource_id": "GHA-04",
-      "name": "Pavi2604",
+    "RES-04": {
+      "name": "Kiran Das",
       "role": "Vehicle Software Engineer",
       "domain": "Vehicle",
       "allocation": 100,
@@ -561,9 +233,8 @@
         "Monitor for burnout and quality issues"
       ]
     },
-    "GHA-01_Vehicle": {
-      "resource_id": "GHA-01",
-      "name": "JyothiLakshmikanth",
+    "RES-05": {
+      "name": "Naveen Kumar",
       "role": "Vehicle Software Engineer",
       "domain": "Vehicle",
       "allocation": 90,
@@ -574,19 +245,8 @@
         "Monitor capacity closely"
       ]
     },
-    "GHA-02_Cloud": {
-      "resource_id": "GHA-02",
-      "name": "bhavya2642-collab",
-      "role": "Cloud Engineer",
-      "domain": "Cloud",
-      "allocation": 80,
-      "location": "Bengaluru",
-      "risk_level": "Medium",
-      "recommendations": []
-    },
-    "GHA-04_QA": {
-      "resource_id": "GHA-04",
-      "name": "Pavi2604",
+    "RES-08": {
+      "name": "Sonal Iyer",
       "role": "QA Engineer",
       "domain": "QA",
       "allocation": 100,
@@ -597,9 +257,8 @@
         "Monitor for burnout and quality issues"
       ]
     },
-    "GHA-01_QA": {
-      "resource_id": "GHA-01",
-      "name": "JyothiLakshmikanth",
+    "RES-09": {
+      "name": "Vikram Joshi",
       "role": "QA Automation Engineer",
       "domain": "QA",
       "allocation": 90,
@@ -612,52 +271,17 @@
     }
   },
   "domain_risks": {
-    "Architecture": {
-      "open_defects": 0,
-      "critical_items": 0,
+    "Unknown": {
+      "open_defects": 12,
+      "critical_items": 6,
       "assigned_resources": [
-        "RES-01"
-      ],
-      "capacity_status": "Unknown"
-    },
-    "Mobile": {
-      "open_defects": 1,
-      "critical_items": 1,
-      "assigned_resources": [
+        "RES-01",
         "RES-02",
-        "RES-03"
-      ],
-      "capacity_status": "Unknown"
-    },
-    "Vehicle": {
-      "open_defects": 5,
-      "critical_items": 3,
-      "assigned_resources": [
         "RES-04",
-        "RES-05"
-      ],
-      "capacity_status": "Unknown"
-    },
-    "Security": {
-      "open_defects": 3,
-      "critical_items": 1,
-      "assigned_resources": [
-        "RES-07"
-      ],
-      "capacity_status": "Unknown"
-    },
-    "Cloud": {
-      "open_defects": 2,
-      "critical_items": 1,
-      "assigned_resources": [
-        "RES-06"
-      ],
-      "capacity_status": "Unknown"
-    },
-    "QA": {
-      "open_defects": 1,
-      "critical_items": 0,
-      "assigned_resources": [
+        "RES-05",
+        "RES-03",
+        "RES-07",
+        "RES-06",
         "RES-08"
       ],
       "capacity_status": "Unknown"
@@ -720,7 +344,7 @@
     {
       "sprint_id": "SPR-06",
       "total_items": 3,
-      "open_items": 3,
+      "open_items": 0,
       "critical_items": 0,
       "risk_level": "Low",
       "focus_areas": [
@@ -730,7 +354,7 @@
     {
       "sprint_id": "SPR-07",
       "total_items": 1,
-      "open_items": 1,
+      "open_items": 0,
       "critical_items": 0,
       "risk_level": "Low",
       "focus_areas": [

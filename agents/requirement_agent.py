@@ -255,9 +255,18 @@ def run_requirement_agent(objective: str) -> dict:
                 "payload": tool_data
             }
 
-    # 3. Action: Semantic Vector Search on Defect Summary
+    # 3. Action: Semantic Vector Search on Defect Summary (or use requirement IDs if extracted from defect)
     else:
-        tool_res_str = impact_analysis_tool.run({"defect_description": objective})
+        # If requirement IDs were extracted from defect context, use them directly
+        if req_ids:
+            tool_input = {"requirement_ids": req_ids}
+            logger.debug(f"RequirementAgent: Using extracted requirement_ids for impact analysis: {req_ids}")
+            tool_res_str = impact_analysis_tool.run(tool_input)
+        else:
+            # Fall back to semantic search on defect description (pass as string)
+            logger.debug(f"RequirementAgent: Using defect_description for vector search: {objective[:100]}")
+            # Pass objective string directly; tool accepts Union[dict, str]
+            tool_res_str = impact_analysis_tool.run(objective)
         try:
             tool_data = json.loads(tool_res_str)
         except Exception:
@@ -301,35 +310,49 @@ class RequirementAgentWrapper:
         self.name = "Requirement Analysis Agent"
 
     def execute_react_loop(self, task_input: Dict[str, Any]) -> Dict[str, Any]:
-        """LangGraph Master execution adapter."""
-        query_type = task_input.get("query_type", "").lower()
-        
-        # Collect IDs from various caller conventions
-        raw_req_ids = []
-        if task_input.get("requirement_ids"):
-            val = task_input["requirement_ids"]
-            if isinstance(val, list):
-                raw_req_ids.extend(val)
-            elif isinstance(val, str):
-                raw_req_ids.extend([x.strip() for x in val.split(",") if x.strip()])
-        if task_input.get("requirement_id"):
-            raw_req_ids.append(task_input["requirement_id"])
+        """LangGraph Master execution adapter.
 
-        # Construct specific objective
-        if query_type in ["lookup_by_id", "requirement_details", "get_details", "details"]:
-            if raw_req_ids:
-                objective = f"Get requirement details for {', '.join(raw_req_ids)}"
-            else:
-                objective = "Get requirement details for REQ-L2-001"
-        elif task_input.get("defect_summary"):
-            objective = task_input["defect_summary"]
-        elif raw_req_ids:
-            if query_type == "impact_analysis":
-                objective = f"Analyze impact and dependencies for {', '.join(raw_req_ids)}"
-            else:
-                objective = f"Requirement details for {', '.join(raw_req_ids)}"
+        Accepts planner's specialized prompt OR traditional requirement_ids-based input.
+        """
+        # PRIMARY: Use planner's specialized prompt
+        if task_input.get("prompt"):
+            objective = task_input["prompt"]
+            logger.debug(f"RequirementAgent: Using planner's specialized prompt")
+        elif task_input.get("agent_prompt"):
+            objective = task_input["agent_prompt"]
+            logger.debug(f"RequirementAgent: Using agent_prompt from planner")
+        elif task_input.get("context"):
+            objective = task_input["context"]
+            logger.debug(f"RequirementAgent: Using context parameter")
         else:
-            objective = task_input.get("query") or "REQ-L2-001"
+            query_type = task_input.get("query_type", "").lower()
+
+            # Collect IDs from various caller conventions
+            raw_req_ids = []
+            if task_input.get("requirement_ids"):
+                val = task_input["requirement_ids"]
+                if isinstance(val, list):
+                    raw_req_ids.extend(val)
+                elif isinstance(val, str):
+                    raw_req_ids.extend([x.strip() for x in val.split(",") if x.strip()])
+            if task_input.get("requirement_id"):
+                raw_req_ids.append(task_input["requirement_id"])
+
+            # Construct specific objective
+            if query_type in ["lookup_by_id", "requirement_details", "get_details", "details"]:
+                if raw_req_ids:
+                    objective = f"Get requirement details for {', '.join(raw_req_ids)}"
+                else:
+                    objective = "Get requirement details for REQ-L2-001"
+            elif task_input.get("defect_summary"):
+                objective = task_input["defect_summary"]
+            elif raw_req_ids:
+                if query_type == "impact_analysis":
+                    objective = f"Analyze impact and dependencies for {', '.join(raw_req_ids)}"
+                else:
+                    objective = f"Requirement details for {', '.join(raw_req_ids)}"
+            else:
+                objective = task_input.get("query") or "REQ-L2-001"
 
         evidence_item = run_requirement_agent(objective)
         req_details = evidence_item.get("requirement_details") or []
@@ -337,7 +360,7 @@ class RequirementAgentWrapper:
 
         evidences = [{
             "artifact_id": f"EVID-REQ-{primary_id.replace(', ', '_')}",
-            "artifact_type": "requirement_details" if "requirement_store" in evidence_item.get("source", "") else "requirement_impact_analysis",
+            "artifact_type": "requirement_record",
             "source_system": evidence_item.get("source", "neo4j_kg"),
             "source_uri": f"neo4j://axiom/requirements/{primary_id}",
             "version": "1.0",

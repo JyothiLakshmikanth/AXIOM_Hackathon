@@ -1,75 +1,586 @@
 """
-Risk Management Analysis Page for AXIOM E-Key 2W Project
-Analyzes defects, tasks, and resource constraints to identify and manage project risks.
-Provides REST API endpoints for dashboard integration and risk queries.
+AXIOM Risk Management Page - Streamlit-based Continuous Risk Management
+Shows project risks in three big cards (Yesterday/Today/Tomorrow) with expandable details.
+Dark theme enforced via .streamlit/config.toml
+Run with: streamlit run streamlit_app.py (then navigate to Risk Cockpit tab)
 """
 
+import streamlit as st
 import pandas as pd
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
-from datetime import datetime
-from collections import defaultdict
-try:
-    from flask import Flask, request, jsonify
-    from flask_cors import CORS
-except ImportError:
-    Flask = None
-    request = None
-    jsonify = None
-    CORS = None
+from datetime import datetime, date, timedelta
+from typing import Dict, List, Optional
 import logging
+
+# ════════════════════════════════════════════════════════════════════════════════
+# STREAMLIT PAGE CONFIGURATION
+# ════════════════════════════════════════════════════════════════════════════════
+
+# Configure page - theme is handled by .streamlit/config.toml
+st.set_page_config(
+    page_title="AXIOM | Risk Management",
+    page_icon="⚠️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+logger = logging.getLogger(__name__)
+
+# ════════════════════════════════════════════════════════════════════════════════
+# COLOR CONFIGURATION
+# ════════════════════════════════════════════════════════════════════════════════
+
+COLORS = {
+    "risk_high": "#e74c3c",
+    "risk_medium": "#f39c12",
+    "risk_low": "#27ae60",
+    "card_bg_yesterday": "rgba(149, 165, 166, 0.08)",
+    "card_bg_today": "rgba(243, 156, 18, 0.08)",
+    "card_bg_tomorrow": "rgba(41, 128, 185, 0.08)",
+    "card_border_yesterday": "#888888",
+    "card_border_today": "#f39c12",
+    "card_border_tomorrow": "#2980b9",
+}
+
+# ════════════════════════════════════════════════════════════════════════════════
+# DATA LOADING - LIVE DATA FROM GITHUB ISSUES
+# ════════════════════════════════════════════════════════════════════════════════
+
+def get_live_risk_data() -> Dict:
+    """Fetch live risk data from GitHub issues.
+    
+    This function pulls actual data from:
+    - GitHub API: Issues (bugs, feature requests, tasks)
+    - Calculates risks dynamically based on current state
+    - Does NOT use hardcoded snapshots - fully dynamic
+    """
+    try:
+        import requests
+        import os
+        
+        today = date.today().isoformat()
+        
+        # GitHub configuration
+        github_token = os.getenv("GITHUB_TOKEN", "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")
+        github_repo = os.getenv("GITHUB_REPO", "JyothiLakshmikanth/EKey2W")
+        
+        # Fetch LIVE GitHub issues
+        all_issues = []
+        try:
+            response = requests.get(
+                f"https://api.github.com/repos/{github_repo}/issues?state=all&per_page=100",
+                headers={"Authorization": f"token {github_token}"},
+                timeout=10
+            )
+            if response.status_code == 200:
+                all_issues = response.json()
+        except Exception as e:
+            logger.warning(f"Failed to fetch GitHub issues: {str(e)}")
+            all_issues = []
+        
+        # Convert to DataFrame for easier analysis
+        issues_df = pd.DataFrame(all_issues) if all_issues else pd.DataFrame()
+        
+        # Identify critical/high priority issues
+        critical_issues = []
+        if not issues_df.empty:
+            # Filter for open issues - check both labels AND title keywords
+            for _, issue in issues_df.iterrows():
+                # Check if issue is still open
+                is_open = issue.get("state") == "open"
+                
+                # Extract labels for priority
+                labels = [label.get("name", "").lower() for label in issue.get("labels", [])] if issue.get("labels") else []
+                
+                # Check title for risk keywords
+                title = issue.get("title", "").lower()
+                risk_keywords = ["critical", "blocker", "urgent", "constraint", "bottleneck", "failure", "crash", "security", "vulnerability"]
+                has_risk_keyword = any(keyword in title for keyword in risk_keywords)
+                
+                # Issue is critical if it has priority label OR risk keyword in title
+                is_critical = has_risk_keyword or any(priority in labels for priority in ["critical", "high", "bug", "security"])
+                
+                if is_open and is_critical:
+                    assignee = issue.get("assignee")
+                    assignee_name = assignee.get("login") if assignee else "Unassigned"
+                    
+                    critical_issues.append({
+                        "rank": len(critical_issues) + 1,
+                        "title": issue.get("title", "Unknown Issue"),
+                        "likelihood": "high" if any(k in title for k in ["critical", "blocker", "urgent"]) or "critical" in labels else "medium",
+                        "summary": f"Status: Open, Labels: {', '.join(labels) if labels else 'none'}",
+                        "evidence": f"GitHub #{issue.get('number', 'N/A')}, Assignee: {assignee_name}",
+                        "rca": {
+                            "root_cause_category": "GitHub Issue",
+                            "root_cause_detail": f"Issue #{issue.get('number', 'N/A')}: {issue.get('title', 'Unknown')}"
+                        },
+                        "linked_requirements": labels,
+                        "recommended_action": f"Resolve GitHub #{issue.get('number', 'issue')}: {issue.get('title', 'issue')}"
+                    })
+        
+        # Identify high-activity areas (potential risk areas) - sample by issue count ranges
+        risk_areas = []
+        if not issues_df.empty:
+            # Group by first part of title (before -)
+            title_categories = {}
+            for _, issue in issues_df.iterrows():
+                if issue.get("state") == "open":
+                    title = issue.get("title", "Unknown")
+                    # Extract category from title (e.g., "TWK-120" from "[TWK-120] Some Title")
+                    if "[" in title:
+                        category = title.split("]")[0] + "]"
+                        title_categories[category] = title_categories.get(category, 0) + 1
+            
+            # Identify concentration areas (3+ issues in same category)
+            for category, count in sorted(title_categories.items(), key=lambda x: x[1], reverse=True):
+                if count >= 3:
+                    risk_areas.append({
+                        "rank": len(risk_areas) + 1,
+                        "title": f"Active Workstream: {category} ({count} open issues)",
+                        "likelihood": "high" if count >= 5 else "medium",
+                        "summary": f"Issue category: {category}, Open issues: {count}",
+                        "evidence": f"GitHub category: {category}",
+                        "rca": {
+                            "root_cause_category": "Workload Concentration",
+                            "root_cause_detail": f"High concentration of '{category}' issues ({count} open)"
+                        },
+                        "linked_requirements": [category],
+                        "recommended_action": f"Focus on resolving {category} issues"
+                    })
+        
+        # Combine critical issues and risk areas
+        features = []
+        all_risks = critical_issues + risk_areas
+        if all_risks:
+            features.append({
+                "feature": "Critical GitHub Issues & Risk Areas",
+                "delivery_risk": "HIGH" if len(critical_issues) > 2 or any(r["likelihood"] == "high" for r in risk_areas) else "MEDIUM",
+                "confidence": "HIGH",
+                "top_risks": all_risks[:5]
+            })
+        
+        # Build issue status summary
+        open_count = len(issues_df[issues_df["state"] == "open"]) if not issues_df.empty else 0
+        closed_count = len(issues_df[issues_df["state"] == "closed"]) if not issues_df.empty else 0
+        total_count = len(issues_df) if not issues_df.empty else 0
+        
+        sprint_risk_data = []
+        if total_count > 0:
+            sprint_risk_data.append({
+                "sprint": "[GITHUB] Issue Status",
+                "status": "Off-Track" if open_count > total_count * 0.3 else "At-Risk" if open_count > 0 else "On-Track",
+                "planned_vs_capacity": f"{total_count} total issues",
+                "defect_inflow_outflow": f"{open_count} open, {closed_count} closed",
+                "note": f"GitHub: {open_count}/{total_count} issues open ({round(open_count/total_count*100, 1)}%)"
+            })
+        
+        # Calculate overall delivery risk based on GitHub metrics
+        delivery_risk = "HIGH" if (open_count > 10 or len(critical_issues) > 2) else "MEDIUM" if (open_count > 5 or len(critical_issues) > 0) else "LOW"
+        
+        return {
+            "date": today,
+            "as_of_date": today,
+            "delivery_risk": delivery_risk,
+            "overall_confidence": "HIGH",  # HIGH confidence because data is live from GitHub API
+            "features": features,
+            "sprint_risk": sprint_risk_data,
+            "tomorrow_outlook": [
+                {
+                    "risk": "Continued issue inflow if root causes not addressed",
+                    "reason": "Unresolved critical issues block progress in dependent areas",
+                    "depends_on": "Priority-based resolution and resource allocation"
+                }
+            ],
+            "is_live_data": True,  # Flag indicating this is live data, not hardcoded
+            "data_source": f"GitHub API ({github_repo})"
+        }
+    
+    except Exception as e:
+        logger.warning(f"Failed to fetch live risk data: {e}")
+        # Fallback to empty snapshot if live data fails
+        return {
+            "date": date.today().isoformat(),
+            "delivery_risk": "MEDIUM",
+            "overall_confidence": "MEDIUM",
+            "as_of_date": date.today().isoformat(),
+            "features": [],
+            "sprint_risk": [],
+            "tomorrow_outlook": [],
+            "is_live_data": False,
+            "data_source": "Fallback (live data unavailable)"
+        }
+
+def get_today_snapshot() -> Dict:
+    """Get today's risk snapshot - fetches LIVE data from GitHub API."""
+    return get_live_risk_data()
+
+def get_prior_snapshot() -> Optional[Dict]:
+    """Get prior snapshot - returns None (we only show current live data)."""
+    return None
+
+# ════════════════════════════════════════════════════════════════════════════════
+# HELPER FUNCTIONS
+# ════════════════════════════════════════════════════════════════════════════════
+
+def get_risk_icon(level: str) -> str:
+    """Get emoji icon for risk level."""
+    level_lower = str(level).lower()
+    if "high" in level_lower or "critical" in level_lower:
+        return "🔴"
+    elif "medium" in level_lower:
+        return "🟡"
+    return "🟢"
+
+def get_risk_color(level: str) -> str:
+    """Get color for risk level."""
+    level_lower = str(level).lower()
+    if "high" in level_lower or "critical" in level_lower:
+        return COLORS["risk_high"]
+    elif "medium" in level_lower:
+        return COLORS["risk_medium"]
+    return COLORS["risk_low"]
+
+# ════════════════════════════════════════════════════════════════════════════════
+# KPI METRICS SECTION
+# ════════════════════════════════════════════════════════════════════════════════
+
+def render_kpis(today_risk: Dict):
+    """Render KPI metrics at the top."""
+    is_live = today_risk.get("is_live_data", False)
+    data_source = today_risk.get("data_source", "Unknown")
+    
+    if is_live:
+        st.markdown("### 📊 Key Performance Indicators (LIVE DATA - Auto-Updated from GitHub)")
+        st.caption(f"🔄 Real-time data: {data_source} | Updated: {today_risk.get('as_of_date', 'now')}")
+    else:
+        st.markdown("### 📊 Key Performance Indicators")
+        st.caption("⚠️ Data source unavailable - showing fallback data")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        critical_count = sum(len(f.get("top_risks", [])) for f in today_risk.get("features", []) 
+                            if f.get("delivery_risk", "").upper() == "HIGH")
+        st.metric("🔴 Critical Risks", critical_count)
+    
+    with col2:
+        open_items = sum(1 for risk in today_risk.get("sprint_risk", []) if "open" in str(risk.get("defect_inflow_outflow", "")).lower())
+        st.metric("📋 Open Items", open_items)
+    
+    with col3:
+        # Count unique risks across all features
+        all_risks = []
+        for f in today_risk.get("features", []):
+            all_risks.extend(f.get("top_risks", []))
+        st.metric("🎯 Top Risks", len(all_risks))
+    
+    with col4:
+        confidence = today_risk.get("overall_confidence", "—")
+        st.metric("✅ Confidence", str(confidence).upper())
+
+# ════════════════════════════════════════════════════════════════════════════════
+# THREE BIG CARDS - Yesterday/Today/Tomorrow
+# ════════════════════════════════════════════════════════════════════════════════
+
+def render_card_header(title: str, date_str: str, risk_level: str, confidence: str = None,
+                      bg_color: str = None, border_color: str = None):
+    """Render a card header."""
+    icon = "🕐" if "Yesterday" in title else ("📍" if "Today" in title else "🔮")
+    
+    html = f"""
+    <div style="
+        background-color: {bg_color};
+        border-left: 5px solid {border_color};
+        border-radius: 10px 10px 0 0;
+        padding: 14px 18px;
+    ">
+        <div style="font-weight: 600; font-size: 15px; margin-bottom: 6px;">
+            {icon}  {title} · {date_str}
+        </div>
+        <div style="font-size: 12px; color: #b0b8c1;">
+            Risk: <span style="color: {get_risk_color(risk_level)}; font-weight: 600;">
+            {str(risk_level).upper()}</span>
+            {f'  ·  Confidence: <span style="color: #27ae60; font-weight: 600;">{str(confidence).upper()}</span>' if confidence else ''}
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+def render_risk_button(risk: Dict) -> str:
+    """Format risk item for button display."""
+    title = risk.get("title", "Untitled")
+    if len(title) > 65:
+        title = title[:62] + "..."
+    icon = get_risk_icon(risk.get("likelihood", "medium"))
+    return f"{icon}  {title}"
+
+def render_pluck_cards(today_risk: Dict, prior_risk: Optional[Dict]):
+    """Render the three big cards (Yesterday/Today/Tomorrow)."""
+    st.markdown("## 📈 Risk Posture Timeline")
+    
+    col1, col2, col3 = st.columns(3, gap="medium")
+    
+    # ─────────────────────────────────────────────────────────────────────────────
+    # YESTERDAY CARD
+    # ─────────────────────────────────────────────────────────────────────────────
+    with col1:
+        if prior_risk:
+            y_date = prior_risk.get("date", "—")
+            y_risk = prior_risk.get("delivery_risk", "—")
+            try:
+                gap_days = (date.today() - date.fromisoformat(y_date)).days
+                y_label = f"Last Assessment ({gap_days} days ago)" if gap_days > 1 else "Yesterday"
+            except:
+                y_label = "Last Assessment"
+        else:
+            y_date, y_risk, y_label = "—", "—", "No Prior Data"
+        
+        render_card_header(
+            y_label, y_date, y_risk,
+            bg_color=COLORS["card_bg_yesterday"],
+            border_color=COLORS["card_border_yesterday"]
+        )
+        
+        with st.container(height=400, border=False):
+            if prior_risk:
+                for i, feature in enumerate(prior_risk.get("features", [])[:2]):
+                    for j, risk in enumerate(feature.get("top_risks", [])[:3]):
+                        label = render_risk_button(risk)
+                        if st.button(label, key=f"y_{i}_{j}", use_container_width=True):
+                            st.session_state.selected_risk = risk
+            else:
+                st.caption("No prior snapshot")
+    
+    # ─────────────────────────────────────────────────────────────────────────────
+    # TODAY CARD
+    # ─────────────────────────────────────────────────────────────────────────────
+    with col2:
+        today_date = today_risk.get("as_of_date", str(date.today()))
+        today_risk_level = today_risk.get("delivery_risk", "MEDIUM")
+        today_confidence = today_risk.get("overall_confidence", "MEDIUM")
+        
+        render_card_header(
+            "Today", today_date, today_risk_level, today_confidence,
+            bg_color=COLORS["card_bg_today"],
+            border_color=COLORS["card_border_today"]
+        )
+        
+        with st.container(height=400, border=False):
+            today_risks = []
+            for feature in today_risk.get("features", []):
+                today_risks.extend(feature.get("top_risks", []))
+            
+            if today_risks:
+                for i, risk in enumerate(today_risks[:5]):
+                    label = render_risk_button(risk)
+                    if st.button(label, key=f"t_{i}", use_container_width=True):
+                        st.session_state.selected_risk = risk
+            else:
+                st.caption("No risks today")
+    
+    # ─────────────────────────────────────────────────────────────────────────────
+    # TOMORROW CARD
+    # ─────────────────────────────────────────────────────────────────────────────
+    with col3:
+        render_card_header(
+            "Tomorrow", "Projected", "MEDIUM",
+            bg_color=COLORS["card_bg_tomorrow"],
+            border_color=COLORS["card_border_tomorrow"]
+        )
+        
+        with st.container(height=400, border=False):
+            outlook = today_risk.get("tomorrow_outlook", [])
+            if outlook:
+                for i, item in enumerate(outlook[:5]):
+                    risk_text = item.get("risk", "Unknown")
+                    if len(risk_text) > 65:
+                        risk_text = risk_text[:62] + "..."
+                    label = f"🔮  {risk_text}"
+                    if st.button(label, key=f"tm_{i}", use_container_width=True):
+                        st.session_state.selected_outlook = item
+            else:
+                st.caption("No projected risks")
+
+# ════════════════════════════════════════════════════════════════════════════════
+# RISK DETAIL PANELS
+# ════════════════════════════════════════════════════════════════════════════════
+
+def render_risk_detail():
+    """Show detailed view of selected risk."""
+    if "selected_risk" in st.session_state and st.session_state.selected_risk:
+        risk = st.session_state.selected_risk
+        st.markdown("---")
+        st.markdown(f"### 🔍 Risk Detail: {risk.get('title', 'Risk')}")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"**Likelihood:** {risk.get('likelihood', '—').upper()}")
+        with col2:
+            st.markdown(f"**Rank:** #{risk.get('rank', '—')}")
+        with col3:
+            confidence = risk.get("confidence", "—")
+            st.markdown(f"**Confidence:** {str(confidence).upper()}")
+        
+        st.markdown(f"**Summary:** {risk.get('summary', 'N/A')}")
+        st.markdown(f"**Evidence:** {risk.get('evidence', 'N/A')}")
+        
+        rca = risk.get("rca", {}) or {}
+        if rca:
+            st.markdown(f"**Root Cause:** {rca.get('root_cause_category', 'Unknown')}")
+            if rca.get('root_cause_detail'):
+                st.markdown(f"*{rca.get('root_cause_detail')}*")
+        
+        if risk.get("linked_requirements"):
+            st.markdown(f"**Requirements:** {', '.join(risk['linked_requirements'])}")
+        
+        if risk.get("recommended_action"):
+            st.warning(f"**Action:** {risk['recommended_action']}")
+    
+    elif "selected_outlook" in st.session_state and st.session_state.selected_outlook:
+        outlook = st.session_state.selected_outlook
+        st.markdown("---")
+        st.markdown("### 🔮 Projected Risk")
+        st.markdown(f"**Risk:** {outlook.get('risk', '—')}")
+        st.markdown(f"**Reason:** {outlook.get('reason', '—')}")
+        st.markdown(f"**Depends On:** {outlook.get('depends_on', '—')}")
+
+# ════════════════════════════════════════════════════════════════════════════════
+# TOP RISKS BY FEATURE
+# ════════════════════════════════════════════════════════════════════════════════
+
+def render_top_risks_by_feature(today_risk: Dict):
+    """Render top risks grouped by feature/team."""
+    st.markdown("## 🎯 Top Risks by Feature/Team")
+    
+    features = today_risk.get("features", [])
+    if not features:
+        st.info("No feature data")
+        return
+    
+    for feature in features:
+        fname = feature.get("feature", "Unknown")
+        frisk = feature.get("delivery_risk", "MEDIUM")
+        fconfidence = feature.get("confidence", "MEDIUM")
+        
+        with st.expander(f"{get_risk_icon(frisk)} {fname} — {str(frisk).upper()}"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Delivery Risk:** {str(frisk).upper()}")
+            with col2:
+                st.markdown(f"**Confidence:** {str(fconfidence).upper()}")
+            
+            for risk in feature.get("top_risks", []):
+                st.markdown(f"**{risk.get('title', 'Risk')}**")
+                st.markdown(f"- Likelihood: {risk.get('likelihood', '—')}")
+                st.markdown(f"- Evidence: {risk.get('evidence', '—')}")
+                if risk.get('recommended_action'):
+                    st.info(risk.get('recommended_action'))
+                st.divider()
+
+# ════════════════════════════════════════════════════════════════════════════════
+# SPRINT RISK TABLE
+# ════════════════════════════════════════════════════════════════════════════════
+
+def render_sprint_risk_table(today_risk: Dict):
+    """Render sprint risk table."""
+    sprint_risks = today_risk.get("sprint_risk", [])
+    
+    if not sprint_risks:
+        st.info("No sprint data")
+        return
+    
+    st.markdown("## 📅 Sprint Risk Assessment")
+    
+    rows = []
+    for row in sprint_risks:
+        rows.append({
+            "Sprint": row.get("sprint", "—"),
+            "Status": row.get("status", "—"),
+            "Planned vs Capacity": row.get("planned_vs_capacity", "—"),
+            "Defect Flow": row.get("defect_inflow_outflow", "—"),
+        })
+    
+    if rows:
+        df = pd.DataFrame(rows)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+# ════════════════════════════════════════════════════════════════════════════════
+# MAIN PAGE FUNCTION
+# ════════════════════════════════════════════════════════════════════════════════
+
+def render_risk_management_page():
+    """Main risk management page function (called from streamlit_app.py)."""
+    
+    # Initialize session state
+    if "selected_risk" not in st.session_state:
+        st.session_state.selected_risk = None
+    if "selected_outlook" not in st.session_state:
+        st.session_state.selected_outlook = None
+    
+    # Load snapshots
+    today = get_today_snapshot()
+    prior = get_prior_snapshot()
+    
+    # Header
+    st.markdown("# ⚠️ AXIOM Risk Management")
+    st.markdown("Evidence-Driven Continuous Risk Assessment")
+    
+    # KPIs
+    st.divider()
+    render_kpis(today)
+    
+    # Three cards
+    st.divider()
+    render_pluck_cards(today, prior)
+    
+    # Risk detail
+    render_risk_detail()
+    
+    # Top risks by feature
+    st.divider()
+    render_top_risks_by_feature(today)
+    
+    # Sprint table
+    st.divider()
+    render_sprint_risk_table(today)
 
 
 class RiskAnalyzer:
     """Analyzes project risks based on defects, capacity, and resource constraints."""
     
-    def __init__(self, data_dir: Optional[str] = None,
-                 jira_df: Optional[pd.DataFrame] = None,
-                 capacity_df: Optional[pd.DataFrame] = None,
-                 competency_df: Optional[pd.DataFrame] = None,
-                 pi_df: Optional[pd.DataFrame] = None):
-        """Initialize risk analyzer with data directory or pre-loaded dataframes."""
-        if data_dir:
-            self.data_dir = Path(data_dir)
-        else:
-            self.data_dir = Path(__file__).parent.parent.parent / "data"
-            
-        self.jira_data = jira_df
-        self.capacity_data = capacity_df
-        self.competency_data = competency_df
-        self.pi_data = pi_df
+    def __init__(self, data_dir: str):
+        """Initialize risk analyzer with data directory."""
+        self.data_dir = Path(data_dir)
+        self.jira_data = None
+        self.capacity_data = None
+        self.competency_data = None
+        self.pi_data = None
         self.risks = []
         self.load_data()
     
     def load_data(self):
-        """Load all required CSV data files if not already provided."""
+        """Load all required CSV data files."""
         try:
-            # Load Sprint/JIRA issues including bugs and tasks
-            if self.jira_data is None:
-                jira_path = self.data_dir / "AXIOM_Sprint_Planning.csv"
-                if not jira_path.exists():
-                    jira_path = self.data_dir / "jira_issues.csv"
-                if jira_path.exists():
-                    self.jira_data = pd.read_csv(jira_path)
+            # Load JIRA issues including bugs and tasks
+            jira_path = self.data_dir / "jira_issues.csv"
+            if jira_path.exists():
+                self.jira_data = pd.read_csv(jira_path)
             
             # Load capacity planning
-            if self.capacity_data is None:
-                capacity_path = self.data_dir / "AXIOM_Capacity_Planning.csv"
-                if capacity_path.exists():
-                    self.capacity_data = pd.read_csv(capacity_path)
+            capacity_path = self.data_dir / "AXIOM_Capacity_Planning.csv"
+            if capacity_path.exists():
+                self.capacity_data = pd.read_csv(capacity_path)
             
             # Load competency matrix
-            if self.competency_data is None:
-                competency_path = self.data_dir / "AXIOM_Competency_Matrix.csv"
-                if competency_path.exists():
-                    self.competency_data = pd.read_csv(competency_path)
+            competency_path = self.data_dir / "AXIOM_Competency_Matrix.csv"
+            if competency_path.exists():
+                self.competency_data = pd.read_csv(competency_path)
             
             # Load PI planning
-            if self.pi_data is None:
-                pi_path = self.data_dir / "AXIOM_PI_Planning_2026.csv"
-                if pi_path.exists():
-                    self.pi_data = pd.read_csv(pi_path)
+            pi_path = self.data_dir / "AXIOM_PI_Planning_2026.csv"
+            if pi_path.exists():
+                self.pi_data = pd.read_csv(pi_path)
                 
         except Exception as e:
             print(f"Error loading data: {e}")
@@ -81,44 +592,21 @@ class RiskAnalyzer:
         if self.jira_data is None:
             return defects
         
-        id_col = 'Id' if 'Id' in self.jira_data.columns else 'Issue Key'
-        assignee_col = 'Owned_By' if 'Owned_By' in self.jira_data.columns else 'Assignee'
-        sprint_col = 'Sprint_ID' if 'Sprint_ID' in self.jira_data.columns else 'Sprint'
-        
-        # Include Bugs, Risks, and Critical/High items that are NOT already Done
+        # Filter for bugs and critical/high priority items
         critical_items = self.jira_data[
-            ((self.jira_data['Type'].isin(['Bug', 'Defect', 'Risk'])) |
-             (self.jira_data['Priority'].isin(['Critical', 'High']))) &
-            (~self.jira_data['Status'].isin(['Done', 'Closed']))
+            (self.jira_data['Type'].isin(['Bug', 'Defect'])) |
+            (self.jira_data['Priority'].isin(['Critical', 'High']))
         ]
         
-        # Associate mapping
-        res_map = {
-            "RES-01": "JyothiLakshmikanth",
-            "RES-02": "bhavya2642-collab",
-            "RES-03": "manjunathan-j",
-            "RES-04": "Pavi2604",
-            "RES-05": "JyothiLakshmikanth",
-            "RES-06": "bhavya2642-collab",
-            "RES-07": "manjunathan-j",
-            "RES-08": "Pavi2604",
-            "GHA-01": "JyothiLakshmikanth",
-            "GHA-02": "bhavya2642-collab",
-            "GHA-03": "manjunathan-j",
-            "GHA-04": "Pavi2604",
-        }
-        
         for _, item in critical_items.iterrows():
-            raw_assignee = str(item.get(assignee_col, 'Unassigned'))
-            assoc_name = res_map.get(raw_assignee, raw_assignee)
             defect = {
-                'id': item.get(id_col, 'N/A'),
+                'id': item.get('Issue Key', 'N/A'),
                 'summary': item.get('Summary', 'N/A'),
                 'type': item.get('Type', 'Unknown'),
                 'status': item.get('Status', 'Unknown'),
                 'priority': item.get('Priority', 'Unknown'),
-                'assignee': f"{assoc_name} ({raw_assignee})" if raw_assignee in res_map else raw_assignee,
-                'sprint': item.get(sprint_col, 'N/A'),
+                'assignee': item.get('Assignee', 'Unassigned'),
+                'sprint': item.get('Sprint', 'N/A'),
                 'impact': self._assess_impact(item),
                 'mitigation': self._suggest_mitigation(item)
             }
@@ -133,34 +621,20 @@ class RiskAnalyzer:
         if self.capacity_data is None:
             return constraints
         
-        # Identify resources with high allocation (>=80%)
-        alloc_col = 'Allocation_%'
-        if alloc_col not in self.capacity_data.columns:
-            return constraints
-            
+        # Identify resources with high allocation (>80%)
         high_allocation = self.capacity_data[
-            pd.to_numeric(self.capacity_data[alloc_col], errors='coerce') >= 80
+            self.capacity_data['Allocation_%'] > 80
         ]
         
-        for idx, resource in high_allocation.iterrows():
-            resource_id = resource.get('Default_Assignee_ID') or resource.get('Resource_ID', f"RES-{idx+1}")
-            associate_name = resource.get('Associate', 'Unknown')
-            role = resource.get('Role', 'Engineer')
-            domain = resource.get('Domain', 'N/A')
-            try:
-                alloc_val = int(resource.get(alloc_col, 0))
-            except (ValueError, TypeError):
-                alloc_val = 0
-            
-            key = f"{resource_id}_{domain}"
-            constraints[key] = {
-                'resource_id': resource_id,
-                'name': associate_name,
-                'role': role,
-                'domain': domain,
-                'allocation': alloc_val,
+        for _, resource in high_allocation.iterrows():
+            resource_id = resource.get('Resource_ID', 'Unknown')
+            constraints[resource_id] = {
+                'name': resource.get('Associate', 'Unknown'),
+                'role': resource.get('Role', 'N/A'),
+                'domain': resource.get('Domain', 'N/A'),
+                'allocation': resource.get('Allocation_%', 0),
                 'location': resource.get('Location', 'N/A'),
-                'risk_level': 'High' if alloc_val >= 100 else 'Medium',
+                'risk_level': 'High' if resource.get('Allocation_%', 0) >= 100 else 'Medium',
                 'recommendations': self._resource_recommendations(resource)
             }
         
@@ -178,14 +652,15 @@ class RiskAnalyzer:
         if self.jira_data is None:
             return domain_risks
         
-        assignee_col = 'Owned_By' if 'Owned_By' in self.jira_data.columns else 'Assignee'
-        
         # Map issue assignees to domains
         for _, issue in self.jira_data.iterrows():
-            assignee = str(issue.get(assignee_col, 'Unknown'))
+            assignee = issue.get('Assignee', 'Unknown')
+            issue_type = issue.get('Type', 'Unknown')
             priority = issue.get('Priority', 'Unknown')
             status = issue.get('Status', 'Unknown')
-            domain = issue.get('Team') or self._find_resource_domain(assignee)
+            
+            # Find domain from competency data if available
+            domain = self._find_resource_domain(assignee)
             
             if status in ['Open', 'In Progress']:
                 domain_risks[domain]['open_defects'] += 1
@@ -205,14 +680,15 @@ class RiskAnalyzer:
         if self.jira_data is None:
             return sprint_risks
         
-        sprint_col = 'Sprint_ID' if 'Sprint_ID' in self.jira_data.columns else 'Sprint'
-        sprints = [s for s in self.jira_data[sprint_col].unique() if pd.notna(s)]
-        sprints.sort()
+        sprints = self.jira_data['Sprint'].unique()
         
         for sprint in sprints:
-            sprint_issues = self.jira_data[self.jira_data[sprint_col] == sprint]
+            if pd.isna(sprint):
+                continue
+                
+            sprint_issues = self.jira_data[self.jira_data['Sprint'] == sprint]
             
-            open_count = len(sprint_issues[~sprint_issues['Status'].isin(['Done', 'Closed'])])
+            open_count = len(sprint_issues[sprint_issues['Status'].isin(['Open', 'In Progress'])])
             critical_count = len(sprint_issues[sprint_issues['Priority'] == 'Critical'])
             
             risk_level = self._calculate_sprint_risk(sprint_issues)
@@ -228,312 +704,57 @@ class RiskAnalyzer:
         
         return sprint_risks
     
-    def analyze_temporal_risks(self) -> Dict:
-        """
-        Dynamically analyzes project risks across three temporal phases based entirely on live data:
-        1. Yesterday's Risks: Evaluated from historical resolved items (Sprint 1-2, Done/Closed)
-        2. Today's Risks: Evaluated from active in-flight items (Sprint 3 open defects, critical bottlenecks)
-        3. Tomorrow's Risks: Evaluated from upcoming backlog (Sprints 4-7, future milestones, PI roadmap)
-        """
-        temporal = {
-            'yesterday_risks': [],
-            'yesterday_metrics': {
-                'total_resolved': 0,
-                'points_delivered': 0,
-                'hours_logged': 0,
-                'regression_rate': '0%',
-                'safeguards': []
-            },
-            'today_risks': [],
-            'today_metrics': {
-                'active_defects_count': 0,
-                'overloaded_engineers_count': 0,
-                'critical_path_items': 0,
-                'sprint_health': 'At Risk'
-            },
-            'today_resource_overloads': [],
-            'today_associate_aggregates': {},
-            'today_mitigations': [],
-            'tomorrow_risks': [],
-            'tomorrow_metrics': {
-                'horizon_risks_count': 0,
-                'next_safety_gate': 'Alpha Exit Gate',
-                'days_remaining': 13,
-                'upcoming_pi_focus': 'PI-2: Passive Access & Authorization'
-            },
-            'pi_roadmap': []
-        }
-        
-        if self.jira_data is None:
-            return temporal
-
-        res_map = {
-            "RES-01": "JyothiLakshmikanth",
-            "RES-02": "bhavya2642-collab",
-            "RES-03": "manjunathan-j",
-            "RES-04": "Pavi2604",
-            "RES-05": "JyothiLakshmikanth",
-            "RES-06": "bhavya2642-collab",
-            "RES-07": "manjunathan-j",
-            "RES-08": "Pavi2604",
-            "GHA-01": "JyothiLakshmikanth",
-            "GHA-02": "bhavya2642-collab",
-            "GHA-03": "manjunathan-j",
-            "GHA-04": "Pavi2604",
-        }
-
-        # ----------------------------------------------------------------------
-        # 1. YESTERDAY'S RISKS (Sprint 1, Sprint 2, or Done/Closed items)
-        # ----------------------------------------------------------------------
-        id_col = 'Id' if 'Id' in self.jira_data.columns else 'Issue Key'
-        assignee_col = 'Owned_By' if 'Owned_By' in self.jira_data.columns else 'Assignee'
-        sprint_col = 'Sprint_ID' if 'Sprint_ID' in self.jira_data.columns else 'Sprint'
-        
-        yesterday_items = self.jira_data[
-            (self.jira_data['Status'].isin(['Done', 'Closed'])) |
-            (self.jira_data[sprint_col].isin(['SPR-01', 'SPR-02']))
-        ]
-        
-        pts_delivered = 0
-        hrs_spent = 0
-        delivered_components = set()
-
-        for _, item in yesterday_items.iterrows():
-            raw_assignee = str(item.get(assignee_col, 'Unassigned'))
-            assoc_name = res_map.get(raw_assignee, raw_assignee)
-            comp = item.get('Components', 'Foundation')
-            delivered_components.add(comp)
-            
-            try:
-                pts_delivered += int(float(item.get('Story_Points') or 0))
-            except (ValueError, TypeError):
-                pass
-            try:
-                hrs_spent += float(item.get('Time_Spent_Hours') or 0)
-            except (ValueError, TypeError):
-                pass
-                
-            temporal['yesterday_risks'].append({
-                'id': item.get(id_col, 'N/A'),
-                'title': item.get('Summary', 'N/A'),
-                'sprint': item.get(sprint_col, 'SPR-01'),
-                'assignee': f"{assoc_name} ({raw_assignee})" if raw_assignee in res_map else raw_assignee,
-                'status': f"✅ Verified & {item.get('Status', 'Done')}",
-                'priority': item.get('Priority', 'Medium'),
-                'threat': self._assess_impact(item),
-                'resolution': f"Delivered in {item.get(sprint_col)} ({item.get('Time_Spent_Hours', 0)}h logged, {comp})",
-                'mitigation': self._suggest_mitigation(item)
-            })
-
-        temporal['yesterday_metrics']['total_resolved'] = len(yesterday_items)
-        temporal['yesterday_metrics']['points_delivered'] = pts_delivered
-        temporal['yesterday_metrics']['hours_logged'] = int(hrs_spent)
-        temporal['yesterday_metrics']['regression_rate'] = '0%'
-        
-        # Build dynamic historical safeguards from delivered components
-        for comp in sorted(delivered_components):
-            comp_items = yesterday_items[yesterday_items['Components'] == comp]
-            ids = ", ".join(comp_items[id_col].astype(str).tolist())
-            temporal['yesterday_metrics']['safeguards'].append(
-                f"**{comp} Baseline Locked**: Validated & closed across items ({ids}) with regression tests enforced in CI."
-            )
-
-        # ----------------------------------------------------------------------
-        # 2. TODAY'S RISKS (Sprint 3 in-flight items, open bugs, and open risks)
-        # ----------------------------------------------------------------------
-        today_items = self.jira_data[
-            ((self.jira_data[sprint_col] == 'SPR-03') |
-             (self.jira_data['Type'].isin(['Bug', 'Defect', 'Risk'])) |
-             (self.jira_data['Priority'] == 'Critical')) &
-            (~self.jira_data['Status'].isin(['Done', 'Closed']))
-        ].drop_duplicates(subset=[id_col])
-        
-        for _, item in today_items.iterrows():
-            raw_assignee = str(item.get(assignee_col, 'Unassigned'))
-            assoc_name = res_map.get(raw_assignee, raw_assignee)
-            temporal['today_risks'].append({
-                'id': item.get(id_col, 'N/A'),
-                'title': item.get('Summary', 'N/A'),
-                'type': item.get('Type', 'Task'),
-                'sprint': item.get(sprint_col, 'SPR-03'),
-                'assignee': f"{assoc_name} ({raw_assignee})" if raw_assignee in res_map else raw_assignee,
-                'status': item.get('Status', 'In Progress'),
-                'priority': item.get('Priority', 'Medium'),
-                'impact': self._assess_impact(item),
-                'mitigation': self._suggest_mitigation(item)
-            })
-            
-        temporal['today_metrics']['active_defects_count'] = len([
-            t for t in temporal['today_risks'] if t['type'] in ['Bug', 'Defect', 'Risk'] or t['priority'] == 'Critical'
-        ])
-        temporal['today_metrics']['critical_path_items'] = len(today_items)
-        
-        # Analyze capacity bottlenecks dynamically
-        if self.capacity_data is not None and 'Allocation_%' in self.capacity_data.columns:
-            alloc_series = pd.to_numeric(self.capacity_data['Allocation_%'], errors='coerce').fillna(0)
-            overloaded = self.capacity_data[alloc_series >= 80]
-            
-            for _, r in overloaded.iterrows():
-                temporal['today_resource_overloads'].append({
-                    'associate': r.get('Associate', 'Unknown'),
-                    'role': r.get('Role', 'Engineer'),
-                    'domain': r.get('Domain', 'N/A'),
-                    'allocation': int(r.get('Allocation_%', 0)),
-                    'status': '🔴 Overloaded' if int(r.get('Allocation_%', 0)) > 85 else '🟡 Near Capacity'
-                })
-            
-            # Cumulative multi-role allocation aggregated by associate
-            assoc_totals = defaultdict(int)
-            assoc_role_details = defaultdict(list)
-            for _, r in self.capacity_data.iterrows():
-                assoc = r.get('Associate')
-                alloc = int(float(r.get('Allocation_%') or 0))
-                role = r.get('Role', 'Engineer')
-                assoc_totals[assoc] += alloc
-                assoc_role_details[assoc].append(f"{role} ({alloc}%)")
-                
-            for assoc, total_pct in assoc_totals.items():
-                roles_str = ", ".join(assoc_role_details[assoc])
-                temporal['today_associate_aggregates'][assoc] = f"{total_pct}% ({roles_str})"
-                
-            temporal['today_metrics']['overloaded_engineers_count'] = len(overloaded)
-
-        # Dynamic Today's Mitigations
-        overloaded_names = {o['associate'] for o in temporal['today_resource_overloads'] if o['allocation'] > 85}
-        for name in overloaded_names:
-            assigned_today = [t for t in temporal['today_risks'] if name in t['assignee'] and t['priority'] in ['Critical', 'High']]
-            if assigned_today:
-                item_names = ", ".join([f"{t['id']} ({t['title']})" for t in assigned_today])
-                temporal['today_mitigations'].append(
-                    f"**Workload Relief for {name}**: Rebalance secondary tasks/QA execution to prevent burnout and safeguard focus on {item_names}."
-                )
-        
-        for item in [t for t in temporal['today_risks'] if t['priority'] == 'Critical']:
-            temporal['today_mitigations'].append(
-                f"**Immediate Safety/Delivery Action for {item['id']} ({item['title']})**: {item['mitigation']}."
-            )
-
-        # ----------------------------------------------------------------------
-        # 3. TOMORROW'S RISKS (Sprint 4-7, future backlog, PI milestones)
-        # ----------------------------------------------------------------------
-        tomorrow_items = self.jira_data[
-            (self.jira_data[sprint_col].isin(['SPR-04', 'SPR-05', 'SPR-06', 'SPR-07'])) |
-            (self.jira_data['Status'].isin(['To Do'])) |
-            (self.jira_data['Planned_For'].isin(['MS-03', 'MS-04']))
-        ]
-        
-        horizon_candidates = tomorrow_items[
-            (tomorrow_items['Priority'].isin(['Critical', 'High'])) |
-            (tomorrow_items['Type'].isin(['Bug', 'Risk']))
-        ]
-        
-        for _, item in horizon_candidates.iterrows():
-            raw_assignee = str(item.get(assignee_col, 'Unassigned'))
-            assoc_name = res_map.get(raw_assignee, raw_assignee)
-            temporal['tomorrow_risks'].append({
-                'milestone': f"{item.get('Planned_For', 'Upcoming')} ({item.get(sprint_col, 'Future')})",
-                'id': item.get(id_col, 'N/A'),
-                'title': item.get('Summary', 'N/A'),
-                'threat': f"Upcoming {item.get('Type', 'work item').lower()} in {item.get('Components', 'system')}; threatens milestone exit criteria if unaddressed.",
-                'owner': f"{assoc_name} ({raw_assignee})" if raw_assignee in res_map else raw_assignee,
-                'preemptive_strategy': self._suggest_mitigation(item)
-            })
-            
-        temporal['tomorrow_metrics']['horizon_risks_count'] = len(temporal['tomorrow_risks'])
-        
-        # 4. PROGRAM INCREMENT ROADMAP (from self.pi_data)
-        if self.pi_data is not None:
-            for _, pi in self.pi_data.iterrows():
-                risk_lvl = str(pi.get('Risk_Level', 'Medium'))
-                risk_badge = "🔴 High" if "high" in risk_lvl.lower() else "🟡 Medium" if "med" in risk_lvl.lower() else "🟢 Low"
-                temporal['pi_roadmap'].append({
-                    'Program Increment': f"{pi.get('PI_ID', 'PI')}: {pi.get('PI_Name', 'Increment')}",
-                    'Milestone': pi.get('Key_Milestones', 'N/A'),
-                    'Focus': pi.get('Focus_Area', 'N/A'),
-                    'Quality Gate': pi.get('Quality_Gate', 'N/A'),
-                    'Status': pi.get('Status', 'Planned'),
-                    'Risk Profile': f"{risk_badge} ({pi.get('Notes', '')})"
-                })
-                
-        return temporal
-
     def generate_risk_report(self) -> Dict:
         """Generate comprehensive risk management report."""
-        temporal = self.analyze_temporal_risks()
-        critical_defects = self.analyze_critical_defects()
-        resource_constraints = self.analyze_resource_constraints()
-        domain_risks = self.analyze_domain_risks()
-        sprint_risks = self.analyze_sprint_risks()
-        
         report = {
             'generated_date': datetime.now().isoformat(),
-            'project': 'AXIOM E-Key 2W Digital Key Platform',
-            'repository': 'https://github.com/JyothiLakshmikanth/EKey2W',
+            'project': 'AXIOM E-Key 2W',
             'summary': {
-                'overall_risk_level': 'Medium-High',
-                'critical_defects': len([d for d in critical_defects if d['priority'] == 'Critical']),
-                'resource_bottlenecks': len(resource_constraints),
-                'at_risk_sprints': len([s for s in sprint_risks if s['risk_level'] in ['High', 'Critical']])
+                'overall_risk_level': 'Medium',
+                'critical_defects': 0,
+                'resource_bottlenecks': 0,
+                'at_risk_sprints': 0
             },
-            'temporal_risks': temporal,
-            'critical_defects': critical_defects,
-            'resource_constraints': resource_constraints,
-            'domain_risks': domain_risks,
-            'sprint_risks': sprint_risks,
+            'critical_defects': self.analyze_critical_defects(),
+            'resource_constraints': self.analyze_resource_constraints(),
+            'domain_risks': self.analyze_domain_risks(),
+            'sprint_risks': self.analyze_sprint_risks(),
             'mitigation_strategies': self._generate_mitigations()
         }
+        
+        # Calculate summary metrics
+        report['summary']['critical_defects'] = len([d for d in report['critical_defects'] 
+                                                      if d['priority'] == 'Critical'])
+        report['summary']['resource_bottlenecks'] = len(report['resource_constraints'])
+        report['summary']['at_risk_sprints'] = len([s for s in report['sprint_risks'] 
+                                                     if s['risk_level'] in ['High', 'Critical']])
+        
         return report
     
     def _assess_impact(self, item: pd.Series) -> str:
-        """Assess the business impact of a defect/task dynamically based on priority, type, component, and labels."""
-        priority = str(item.get('Priority', 'Medium'))
-        item_type = str(item.get('Type', 'Task'))
+        """Assess the business impact of a defect."""
+        priority = item.get('Priority', 'Medium')
         summary = str(item.get('Summary', '')).lower()
-        component = str(item.get('Components', '')).lower()
-        labels = str(item.get('labels', '')).lower()
         
-        if priority == 'Critical' and (item_type in ['Bug', 'Defect'] or 'safety' in summary or 'boundary' in summary):
-            return "Critical (ASIL-B Safety Violation / Milestone Blocker)"
-        elif priority == 'Critical':
-            return "High (Sprint Critical Path Delivery Blocker)"
-        elif 'latency' in summary or 'performance' in component:
-            return "Medium-High (QoS Latency SLA Breach)"
-        elif 'security' in summary or 'security' in labels or 'revocation' in summary:
-            return "High (Security Vulnerability / Access Risk)"
-        elif item_type == 'Risk':
-            return "High (Resource / Quality Gate Risk)"
-        elif priority == 'High':
-            return "Medium-High (Schedule Risk)"
-        elif priority == 'Medium':
-            return "Medium (Sprint Scope Delivery Risk)"
+        if priority == 'Critical' or 'security' in summary or 'boundary' in summary:
+            return 'High'
+        elif priority == 'High' or 'latency' in summary:
+            return 'Medium'
         else:
-            return "Low (Minor Operational)"
+            return 'Low'
     
     def _suggest_mitigation(self, item: pd.Series) -> str:
-        """Suggest mitigation strategy for an item dynamically based on its domain, component, and description."""
+        """Suggest mitigation strategy for a defect."""
         summary = str(item.get('Summary', '')).lower()
-        component = str(item.get('Components', '')).lower()
-        item_type = str(item.get('Type', 'Task'))
-        labels = str(item.get('labels', '')).lower()
         
-        if 'boundary' in summary or 'proximity' in component:
-            return "Apply dual-threshold hysteresis debounce filter & expand edge test coverage"
-        elif 'latency' in summary or 'performance' in component:
-            return "Optimize async polling, BLE buffer allocations & packet queuing"
-        elif 'revocation' in summary or 'cache' in summary:
-            return "Implement event-driven push invalidation hook & local secure element blacklist"
-        elif 'security' in summary or 'security' in labels:
-            return "Conduct cryptographic review, audit logging & enforce HSM state validation"
-        elif 'qa' in summary or 'capacity' in summary or 'quality' in labels:
-            return "Offload manual execution to automated HIL rigs & cross-train automation engineers"
-        elif 'resource' in summary or item_type == 'Risk':
-            return "Rebalance non-critical sprint backlog & adjust resource allocations"
-        elif 'mobile' in component or 'auth' in summary:
-            return "Refactor session handshake & clean background lifecycle coroutine listeners"
-        elif 'vehicle' in component or 'gateway' in component:
-            return "Apply priority CAN-FD arbitration ID filtering & buffer overrun protection"
+        if 'security' in summary:
+            return 'Prioritize security review and patching'
+        elif 'latency' in summary:
+            return 'Performance optimization task required'
+        elif 'boundary' in summary:
+            return 'Edge case testing and validation needed'
         else:
-            return f"Prioritize code review on {item.get('Components', 'component')} & enforce CI gating"
+            return 'Standard defect resolution process'
     
     def _resource_recommendations(self, resource: pd.Series) -> List[str]:
         """Generate recommendations for high-allocation resources."""
@@ -874,6 +1095,13 @@ class RiskDashboardAPI:
         return self.app
 
 
+# ════════════════════════════════════════════════════════════════════════════════
+# STREAMLIT ENTRY POINT
+# ════════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    render_risk_management_page()
+
 def main():
     """Main function to run risk analysis and dashboard API."""
     import sys
@@ -908,5 +1136,5 @@ def main():
     return analyzer
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

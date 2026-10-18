@@ -1,0 +1,127 @@
+{
+  "date": "2026-10-18",
+  "as_of_date": "2026-10-18",
+  "delivery_risk": "HIGH",
+  "overall_confidence": "MEDIUM",
+  "features": [
+    {
+      "feature": "PK_CDS_BLE_APP_Team",
+      "delivery_risk": "HIGH",
+      "confidence": "HIGH",
+      "top_risks": [
+        {
+          "rank": 1,
+          "title": "Critical Defect PK3AUDI-16914 Blocking BLE_APP Delivery",
+          "likelihood": "high",
+          "summary": "BLE app fails to unlock on boundary zone interactions, threatening delivery milestone",
+          "evidence": "3 critical defects, 2 high-priority open, affecting 2 teams (BLE, Unlock)",
+          "rca": {
+            "root_cause_category": "State Machine Design",
+            "root_cause_detail": "Insufficient hysteresis in boundary-zone unlock logic"
+          },
+          "linked_requirements": ["SysRS-204", "SysRS-205"],
+          "linked_testcases": ["Test-Case-1204"],
+          "recommended_action": "Deploy mutex-enforced state machine patch, add boundary-zone integration tests"
+        },
+        {
+          "rank": 2,
+          "title": "BLE_APP Feature Burn Rate Severely Lagging (11% in 2 weeks)",
+          "likelihood": "high",
+          "summary": "Burn rate is 11% of planned, causing sprint overrun and delivery slip",
+          "evidence": "Time spent 45h, estimate 180h (25% completed)",
+          "rca": {
+            "root_cause_category": "Capacity Shortage",
+            "root_cause_detail": "Resource RES-04 overallocated at 95%, blocking progress"
+          },
+          "linked_requirements": ["SysRS-200", "SysRS-201"],
+          "linked_testcases": ["Test-Case-1200", "Test-Case-1201"],
+          "recommended_action": "Redistribute tasks to RES-05, RES-06; hire contract resource for 2 weeks"
+        },
+        {
+          "rank": 3,
+          "title": "Critical Defect PK3AUDI-16901 Unassigned to Team — Ownership Unknown",
+          "likelihood": "medium",
+          "summary": "Security defect unassigned, unclear who owns fix, blocking compliance review",
+          "evidence": "1 critical defect, 1 high-priority, unassigned",
+          "rca": {
+            "root_cause_category": "Organization",
+            "root_cause_detail": "Defect assignment process broken for security items"
+          },
+          "linked_requirements": ["SysRS-300"],
+          "linked_testcases": [],
+          "recommended_action": "Assign to RES-03 immediately, update JIRA ownership rules for security defects"
+        }
+      ]
+    },
+    {
+      "feature": "PK_CV_Team",
+      "delivery_risk": "MEDIUM",
+      "confidence": "MEDIUM",
+      "top_risks": [
+        {
+          "rank": 4,
+          "title": "CV39-40 Overrun Cascades into CW41-42, Consuming +896h Headroom",
+          "likelihood": "medium",
+          "summary": "Feature overrun rippling into dependent feature, threatening overall delivery",
+          "evidence": "Planned 800h, already spent 600h, only 40% complete",
+          "rca": {
+            "root_cause_category": "Estimation",
+            "root_cause_detail": "Original estimate missed 35% scope"
+          },
+          "linked_requirements": ["SysRS-400", "SysRS-401"],
+          "linked_testcases": ["Test-Case-1400"],
+          "recommended_action": "Replan CV39 with 1200h estimate, delay non-critical CV40 work"
+        },
+        {
+          "rank": 5,
+          "title": "Unresolved Critical Defects in BLE_APP and Unassigned Teams Estimate",
+          "likelihood": "medium",
+          "summary": "Multiple teams with unresolved critical defects, scope unclear",
+          "evidence": "4 critical unassigned defects across 3 teams",
+          "rca": {
+            "root_cause_category": "Process",
+            "root_cause_detail": "Defect triage not performed weekly"
+          },
+          "linked_requirements": [],
+          "linked_testcases": [],
+          "recommended_action": "Implement weekly defect triage meeting, enforce assignment within 24h"
+        }
+      ]
+    }
+  ],
+  "sprint_risk": [
+    {
+      "sprint": "[CURRENT] SPR-03",
+      "status": "Off-Track",
+      "planned_vs_capacity": "1200h / 900h",
+      "defect_inflow_outflow": "7 new defects (3 critical), 2 resolved",
+      "adhoc_impact": "45h ad-hoc load (5% impact on capacity)",
+      "note": "Over-planned by 300h, critical defects blocking progress"
+    },
+    {
+      "sprint": "[UPCOMING] SPR-04",
+      "status": "At-Risk",
+      "planned_vs_capacity": "950h / 900h",
+      "defect_inflow_outflow": "Expected 4-5 carryover defects from SPR-03",
+      "adhoc_impact": "Unknown, monitor SPR-03 resolution",
+      "note": "Tight on capacity if SPR-03 overrun continues"
+    }
+  ],
+  "tomorrow_outlook": [
+    {
+      "risk": "CW39-40 Overrun Cascades into CW41-42, Consuming +896h Headroom",
+      "reason": "Dependent risk that may surface if CV39-40 overrun continues unaddressed",
+      "depends_on": "CV39 scope/estimation fix"
+    },
+    {
+      "risk": "Resource RES-04 Burnout & Quality Degradation",
+      "reason": "Persists if allocation remains >90% and critical defects are not redistributed",
+      "depends_on": "Task redistribution and hiring approval"
+    },
+    {
+      "risk": "Compliance Review Miss — Unassigned Security Defect PK3AUDI-16901",
+      "reason": "Persists if PK3AUDI-16901 remains unassigned; blocks final approval gate",
+      "depends_on": "Immediate assignment and RCA completion"
+    }
+  ]
+}

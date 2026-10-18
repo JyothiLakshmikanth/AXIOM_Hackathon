@@ -280,8 +280,48 @@ class TestAgentWrapper:
         self.name = "Test & Verification Specialist Agent"
 
     def execute_react_loop(self, task_input: Dict[str, Any]) -> Dict[str, Any]:
-        """LangGraph Master execution adapter."""
-        # Extract inputs from task_input
+        """LangGraph Master execution adapter.
+
+        Accepts planner's specialized prompt OR traditional test_case_ids-based input.
+        """
+        # PRIMARY: Use planner's specialized prompt
+        if task_input.get("prompt"):
+            objective = task_input["prompt"]
+            logger.debug(f"TestAgent: Using planner's specialized prompt")
+        elif task_input.get("agent_prompt"):
+            objective = task_input["agent_prompt"]
+            logger.debug(f"TestAgent: Using agent_prompt from planner")
+        elif task_input.get("context"):
+            objective = task_input["context"]
+            logger.debug(f"TestAgent: Using context parameter")
+        else:
+            # Extract inputs from task_input
+            req_ids = []
+            if task_input.get("requirement_ids"):
+                val = task_input["requirement_ids"]
+                req_ids = val if isinstance(val, list) else [val]
+            elif task_input.get("requirement_id"):
+                req_ids = [task_input["requirement_id"]]
+
+            tc_ids = []
+            if task_input.get("test_case_ids"):
+                val = task_input["test_case_ids"]
+                tc_ids = val if isinstance(val, list) else [val]
+            elif task_input.get("test_case_id"):
+                tc_ids = [task_input["test_case_id"]]
+
+            desc = (
+                task_input.get("descriptions")
+                or task_input.get("description")
+                or task_input.get("defect_summary")
+                or task_input.get("query")
+                or task_input.get("target_id")
+                or ""
+            )
+
+            objective = task_input.get("objective") or desc
+
+        # Extract IDs even when using planner prompt
         req_ids = []
         if task_input.get("requirement_ids"):
             val = task_input["requirement_ids"]
@@ -304,8 +344,6 @@ class TestAgentWrapper:
             or task_input.get("target_id")
             or ""
         )
-
-        objective = task_input.get("objective") or desc
 
         # Execute test agent logic
         result = run_test_agent(

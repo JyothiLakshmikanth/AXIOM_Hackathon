@@ -438,46 +438,49 @@ graph = builder.compile()
 
 ### Phase 5: Streamlit HITL UI
 
-#### 12. **HITL Renderer** (`streamlit_components/hitl_renderer.py`) — NEW
-Human-in-loop checkpoint UI:
+#### 12. **HITL Renderer & 3-Stage Pipeline Checkpoint** (`streamlit_components/hitl_renderer.py`) — ENHANCED
+Human-in-the-loop checkpoint UI with interactive approval, PR inspection, unified patch diff, and issue ticket comments:
 
 ```python
 def render_hitl_checkpoint(state: AxiomState) -> Dict[str, Any]:
     """
     Render HUMAN_VALIDATE checkpoint in Streamlit.
-    Return: {"human_validation_result": str, "human_feedback": str}
+    Displays:
+    - Structured analysis findings
+    - Generated SVG vector diagram (Gemini LLM) or Mermaid.js interactive visualization
+    - GitHub Issue Comment confirmation link
+    - Live Pull Request badge and branch link
+    - Interactive unified patch diff viewer
+    Return: {"human_validation_result": "APPROVED" | "REJECTED" | "REQUEST_MORE", "human_feedback": str}
     """
+    st.header("🔍 Human-in-Loop Validation Checkpoint")
     
-    st.header("🔍 Human-in-Loop Validation")
-    
-    # Display structured answer
+    # 1. Structured Analysis Findings
     sections = state["structured_answer"].get("sections", [])
     for section in sections:
         st.subheader(section["title"])
         st.write(section["content"])
     
-    # Display visual if present
+    # 2. Pure Gemini LLM SVG Vector Diagram / Mermaid Fallback
     if state["visual_artifact"].get("image_url"):
-        st.image(state["visual_artifact"]["image_url"])
+        st.image(state["visual_artifact"]["image_url"], width="stretch")
+    elif state["visual_artifact"].get("fallback_mermaid"):
+        render_mermaid_diagram(state["visual_artifact"]["fallback_mermaid"])
     
-    # Approval buttons
+    # 3. Verified Evidence, Pull Request Badge & Patch Diff
+    _display_evidence_summary(state.get("evidence_envelopes", []))
+    
+    # 4. Action Buttons (Rule #3 Compliance)
     col1, col2, col3 = st.columns(3)
-    
     with col1:
-        if st.button("✅ Approve"):
+        if st.button("✅ Approve Fix & PR", type="primary"):
             return {"human_validation_result": "APPROVED", "human_feedback": ""}
-    
     with col2:
-        if st.button("❌ Reject"):
-            feedback = st.text_area("Why reject?")
-            if st.button("Submit"):
-                return {"human_validation_result": "REJECTED", "human_feedback": feedback}
-    
+        if st.button("❌ Reject Proposed Fix"):
+            st.session_state.show_reject_form = True
     with col3:
-        if st.button("📝 Request More"):
-            request = st.text_area("What more needed?")
-            if st.button("Submit"):
-                return {"human_validation_result": "REQUEST_MORE", "human_feedback": request}
+        if st.button("📝 Request Additional Analysis"):
+            st.session_state.show_request_form = True
 ```
 
 ---
