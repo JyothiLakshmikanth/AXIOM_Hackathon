@@ -1,26 +1,26 @@
-# Cloud Build configuration for AXIOM Orchestrator
-# Deploy to GCP Cloud Run
+# AXIOM POC - Cloud Build configuration
+# Builds the Streamlit application, pushes it to Artifact Registry,
+# and deploys it to Cloud Run.
 
 steps:
-  # Build and push to the pre-provisioned Artifact Registry repository.
+  # 1. Build the Streamlit container
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args:
       - 'build'
       - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom/axiom-orchestrator:$BUILD_ID'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom-poc/axiom-poc:$BUILD_ID'
       - '-f'
       - 'Dockerfile'
       - '.'
 
-  # Push image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
     args:
       - 'push'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom/axiom-orchestrator:$BUILD_ID'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom-poc/axiom-poc:$BUILD_ID'
 
-  # Step 3: Deploy to Cloud Run
+  # 3. Deploy Streamlit to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
     id: 'deploy-cloud-run'
     entrypoint: 'gcloud'
@@ -28,20 +28,19 @@ steps:
       - 'run'
       - 'deploy'
       - '${_SERVICE_NAME}-${_ENVIRONMENT}'
-      - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom/axiom-orchestrator:$BUILD_ID'
+      - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom-poc/axiom-poc:$BUILD_ID'
       - '--region=${_REGION}'
-      - --platform=managed
-      - --memory=2Gi
-      - --cpu=2
-      - --timeout=3600
-      - --max-instances=1
-      - --min-instances=0
-      - --allow-unauthenticated
-      - --session-affinity
-      - --update-env-vars=ENVIRONMENT=${_ENVIRONMENT},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,VERTEX_AI_GEMINI_MODEL=gemini-2.5-pro,NEO4J_URI=neo4j+s://fe6b9516.databases.neo4j.io,NEO4J_USERNAME=neo4j,NEO4J_PASSWORD=1TPdCR7jnlqGCoG_s1MAGGQnYadFHhcoIexh_gAMccA
-      - --service-account=axiom-orchestrator@$PROJECT_ID.iam.gserviceaccount.com
-
-  # Step 4: Verify deployment
+      - '--platform=managed'
+      - '--memory=2Gi'
+      - '--cpu=2'
+      - '--timeout=3600'
+      - '--max-instances=1'
+      - '--min-instances=0'
+      - '--allow-unauthenticated'
+      - '--session-affinity'
+      - '--update-env-vars=ENVIRONMENT=${_ENVIRONMENT},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_PROJECT=$PROJECT_ID,GCP_PROJECT_ID=$PROJECT_ID,GEMINI_API_KEY=AQ.Ab8RN6KVtoHm0-SlVOsZuuoGJypnNSxVXBXfPoXc0wcXJ22DsQ,GOOGLE_API_KEY=AQ.Ab8RN6KVtoHm0-SlVOsZuuoGJypnNSxVXBXfPoXc0wcXJ22DsQ,GITHUB_TOKEN=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,VERTEX_AI_GEMINI_MODEL=gemini-1.5-flash-001,GOOGLE_CLOUD_LOCATION=${_REGION}'
+      - '--service-account=axiom-orchestrator@$PROJECT_ID.iam.gserviceaccount.com'
+  # 4. Verify the Cloud Run service
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
     id: 'verify-deployment'
     entrypoint: 'gcloud'
@@ -52,22 +51,16 @@ steps:
       - '${_SERVICE_NAME}-${_ENVIRONMENT}'
       - '--region=${_REGION}'
 
-# Image to be pushed to Artifact Registry
 images:
-  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom/axiom-orchestrator:$BUILD_ID'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/axiom-poc/axiom-poc:$BUILD_ID'
 
-# Build timeout
 timeout: '3600s'
 
-# Substitutions
 substitutions:
   _REGION: 'us-central1'
-  _SERVICE_NAME: 'axiom-orchestrator'
+  _SERVICE_NAME: 'axiom-poc'
   _ENVIRONMENT: 'prod'
 
-# Options
 options:
   machineType: 'E2_MEDIUM'
-  logging: CLOUD_LOGGING_ONLY
-  
 

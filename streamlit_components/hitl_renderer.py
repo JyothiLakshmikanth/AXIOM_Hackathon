@@ -15,7 +15,90 @@ Key responsibilities:
 
 from typing import Dict, List, Any
 import streamlit as st
+import streamlit.components.v1 as components
 from orchestrator.state import AxiomState
+
+
+def render_mermaid_diagram(mermaid_code: str, caption: str = ""):
+    """Renders a Mermaid diagram as an interactive graphical SVG visualization."""
+    if not mermaid_code:
+        return
+    clean = mermaid_code.strip()
+    if clean.startswith("```mermaid"):
+        clean = clean[len("```mermaid"):].strip()
+    if clean.startswith("```"):
+        clean = clean[3:].strip()
+    if clean.endswith("```"):
+        clean = clean[:-3].strip()
+
+    lines_count = len(clean.splitlines())
+    calc_height = max(320, min(800, lines_count * 45 + 130))
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+      <style>
+        body {{
+          background-color: transparent;
+          color: #f1f5f9;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          margin: 0;
+          padding: 8px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+        }}
+        .mermaid-container {{
+          background: #0f172a;
+          border: 1px solid #334155;
+          border-radius: 10px;
+          padding: 24px;
+          width: 95%;
+          max-width: 980px;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+          overflow-x: auto;
+          display: flex;
+          justify-content: center;
+        }}
+        .caption {{
+          margin-top: 10px;
+          font-size: 0.85rem;
+          color: #94a3b8;
+          text-align: center;
+        }}
+      </style>
+    </head>
+    <body>
+      <div class="mermaid-container">
+        <pre class="mermaid">
+{clean}
+        </pre>
+      </div>
+      {f'<div class="caption">🔍 {caption}</div>' if caption else ''}
+      <script>
+        mermaid.initialize({{
+          startOnLoad: true,
+          theme: 'dark',
+          themeVariables: {{
+            darkMode: true,
+            background: '#0f172a',
+            primaryColor: '#2563eb',
+            primaryTextColor: '#ffffff',
+            primaryBorderColor: '#3b82f6',
+            lineColor: '#60a5fa',
+            secondaryColor: '#1e293b',
+            tertiaryColor: '#0f172a'
+          }}
+        }});
+      </script>
+    </body>
+    </html>
+    """
+    components.html(html_content, height=calc_height, scrolling=True)
 
 
 def render_hitl_checkpoint(state: AxiomState) -> Dict[str, Any]:
@@ -70,12 +153,15 @@ def render_hitl_checkpoint(state: AxiomState) -> Dict[str, Any]:
 
         if visual_artifact.get("image_url"):
             caption = visual_artifact.get("structured_caption", "Generated visualization")
-            st.image(visual_artifact["image_url"], caption=caption, use_container_width=True)
+            try:
+                st.image(visual_artifact["image_url"], caption=caption, width="stretch")
+            except Exception:
+                st.image(visual_artifact["image_url"], caption=caption)
         elif visual_artifact.get("fallback_mermaid"):
             st.info(
                 f"Visual Type: **{visual_artifact.get('visual_type', 'diagram')}**"
             )
-            st.code(visual_artifact["fallback_mermaid"], language="mermaid")
+            render_mermaid_diagram(visual_artifact["fallback_mermaid"], caption=visual_artifact.get("structured_caption", "Analysis Visual"))
 
     st.divider()
 
@@ -86,18 +172,19 @@ def render_hitl_checkpoint(state: AxiomState) -> Dict[str, Any]:
         st.divider()
 
     # Human validation decision buttons
-    st.subheader("✅ Your Decision")
+    st.subheader("✅ Human Engineering Review & Decision")
+    st.caption("Review the analysis, verified code fix, and linked Pull Request above before granting production approval.")
 
     col1, col2, col3 = st.columns(3)
 
     # Approval path
     with col1:
-        if st.button("✅ Approve", key="approve_btn", use_container_width=True):
+        if st.button("✅ Approve Fix & PR", key="approve_btn", type="primary"):
             st.session_state.hitl_decision = {
                 "human_validation_result": "APPROVED",
                 "human_feedback": ""
             }
-            st.success("Analysis approved! Proceeding with final response...")
+            st.success("Analysis and PR approved! Proceeding with final delivery...")
             return {
                 "human_validation_result": "APPROVED",
                 "human_feedback": ""
@@ -105,12 +192,12 @@ def render_hitl_checkpoint(state: AxiomState) -> Dict[str, Any]:
 
     # Rejection path
     with col2:
-        if st.button("❌ Reject", key="reject_btn", use_container_width=True):
+        if st.button("❌ Reject Proposed Fix", key="reject_btn"):
             st.session_state.show_reject_form = True
 
     # Request more path
     with col3:
-        if st.button("📝 Request More", key="request_btn", use_container_width=True):
+        if st.button("📝 Request Additional Analysis", key="request_btn"):
             st.session_state.show_request_form = True
 
     # Rejection form
@@ -254,14 +341,9 @@ def format_structured_answer(structured_answer: Dict[str, Any]) -> str:
 def _display_evidence_summary(evidence_envelopes: List[Dict[str, Any]]) -> None:
     """
     Display what evidence was collected for transparency.
-
-    Shows evidence sources and types to help human understand what data
-    informed the analysis.
-
-    Args:
-        evidence_envelopes: List of EvidenceEnvelope dicts with metadata.
+    Shows evidence sources, types, URLs, linked entities, and full payload.
     """
-    with st.expander(f"📋 Evidence Collected ({len(evidence_envelopes)} sources)"):
+    with st.expander(f"📋 Verified Evidence & Agent Outputs ({len(evidence_envelopes)} sources)", expanded=True):
         for i, env in enumerate(evidence_envelopes, 1):
             col1, col2, col3 = st.columns(3)
 
@@ -282,6 +364,44 @@ def _display_evidence_summary(evidence_envelopes: List[Dict[str, Any]]) -> None:
                     st.warning(quality)
                 else:
                     st.info(quality)
+
+            payload = env.get("payload", {})
+            title = payload.get("Title") or payload.get("Summary") or env.get("artifact_id")
+            st.markdown(f"#### 📄 {env.get('artifact_id')}: {title}")
+
+            if payload.get("URL"):
+                st.markdown(f"🔗 **Repository URL:** [{payload.get('URL')}]({payload.get('URL')})")
+
+            if payload.get("PR_URL"):
+                st.markdown(
+                    f"🔀 **Pull Request:** [#{payload.get('PR_Number')}: {payload.get('PR_URL')}]({payload.get('PR_URL')}) "
+                    f"| **Branch:** `{payload.get('Branch')}`"
+                )
+
+            if payload.get("comment_url"):
+                st.markdown(f"💬 **Issue Ticket Comment:** [{payload.get('comment_url')}]({payload.get('comment_url')})")
+
+            if payload.get("root_cause_diagnosis"):
+                st.info(f"🔍 **AST Root Cause:** {payload.get('root_cause_diagnosis')}")
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if payload.get("Linked_Requirements"):
+                    st.markdown(f"📌 **Linked Requirements:** `{', '.join(payload.get('Linked_Requirements'))}`")
+            with col_b:
+                if payload.get("Linked_Test_Cases"):
+                    st.markdown(f"🧪 **Linked Test Cases:** `{', '.join(payload.get('Linked_Test_Cases'))}`")
+
+            if payload.get("Patch_Diff"):
+                with st.expander("📝 View Proposed Surgical Patch Diff", expanded=True):
+                    st.code(payload.get("Patch_Diff"), language="diff")
+
+            if payload.get("Body"):
+                with st.expander("📝 View Full Issue Description / Body"):
+                    st.markdown(payload.get("Body"))
+
+            with st.expander("🔍 View Raw Evidence Envelope JSON"):
+                st.json(env)
 
             st.divider()
 

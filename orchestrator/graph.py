@@ -1,9 +1,13 @@
 """
-AXIOM 9-Node End-to-End Master StateGraph Orchestration.
-Implements full 9-node LangGraph architecture with intelligent PLAN node, cross-handoff,
-conditional visual generation, and human-in-loop validation checkpoint.
+AXIOM 10-Node End-to-End Master StateGraph Orchestration.
+Implements 10-node LangGraph architecture with evidence caching at master level, intelligent PLAN node,
+cross-handoff, conditional visual generation, and human-in-loop validation checkpoint.
 
-Nodes: REASON → PLAN → EXECUTE → OBSERVE → EVALUATE → CROSS_HANDOFF → SYNTHESIZE → VISUAL_GEN → HUMAN_VALIDATE
+Nodes: REASON → EVIDENCE_CHECK → PLAN (or EVALUATE if cache hit) → EXECUTE → OBSERVE → EVALUATE →
+       CROSS_HANDOFF → SYNTHESIZE → VISUAL_GEN → HUMAN_VALIDATE
+
+Evidence check prevents redundant agent calls by checking Firestore cache first (user+session scoped).
+
 Supports both formal LangGraph compiled graph and native AxiomCognitiveRunner.
 """
 
@@ -14,9 +18,9 @@ from typing import Dict, Any, Optional
 
 from orchestrator.state import AxiomState
 from orchestrator.router import router_node
+from orchestrator.evidence_check_node import evidence_check_node
 from orchestrator.master_nodes import (
     reason_node,
-    memory_retrieval_node,
     plan_node,
     execute_agent_node,
     observe_evidence_node,
@@ -41,12 +45,12 @@ from orchestrator.edge_routing import (
 # These are now unified nodes, not pm_/eng_ prefixed
 from orchestrator.master_nodes import (
     reason_node as unified_reason_node,
-    memory_retrieval_node as unified_memory_node,
     plan_node as unified_plan_node,
     execute_agent_node as unified_execute_node,
     observe_evidence_node as unified_observe_node,
     evaluate_node as unified_evaluate_node
 )
+from orchestrator.evidence_check_node import evidence_check_node as unified_evidence_check_node
 
 logger = logging.getLogger("axiom.orchestrator.graph")
 
@@ -79,9 +83,9 @@ def build_axiom_langgraph():
         builder.set_entry_point("router")
         builder.add_conditional_edges("router", route_after_intent_router)
 
-        # 2-7. SHARED COGNITIVE LOOP (Both PM.ai and ENG.ai use same nodes)
+        # 2-8. SHARED COGNITIVE LOOP (Both PM.ai and ENG.ai use same nodes)
         builder.add_node("reason", reason_node)
-        builder.add_node("memory", memory_retrieval_node)
+        builder.add_node("evidence_check", evidence_check_node)
         builder.add_node("plan", plan_node)
         builder.add_node("execute", execute_agent_node)
         builder.add_node("observe", observe_evidence_node)
@@ -97,11 +101,14 @@ def build_axiom_langgraph():
         # EDGES: UNIFIED FLOW FOR BOTH MASTERS
         # ============================================================================
 
-        # REASON → MEMORY
-        builder.add_edge("reason", "memory")
+        # REASON → EVIDENCE_CHECK
+        builder.add_edge("reason", "evidence_check")
 
-        # MEMORY: Hit → EVALUATE, Miss → PLAN
-        builder.add_conditional_edges("memory", route_after_memory)
+        # EVIDENCE_CHECK: Hit → EVALUATE (skip planning), Miss → PLAN
+        builder.add_conditional_edges(
+            "evidence_check",
+            lambda state: "evaluate" if state.get("evidence_cache_hit") else "plan"
+        )
 
         # PLAN → EXECUTE → OBSERVE → EVALUATE (Core loop)
         builder.add_edge("plan", "execute")
@@ -151,6 +158,8 @@ class AxiomCognitiveRunner:
             "session_id": session_id,
             "user_id": user_id,
             "evidence_envelopes": [],
+            "executed_agents": [],
+            "agent_executions": [],
             "evaluation_iteration_count": 0,
             "hitl_loop_count": 0,
             "guardrail_messages": [],
@@ -163,25 +172,6 @@ class AxiomCognitiveRunner:
         # STEP 1: TOP-LEVEL ROUTER NODE
         # ============================================================================
         state = router_node(state)
-        if state.get("is_direct_response"):
-            logger.info("Router: Handled query directly (greeting/help). Ending gracefully.")
-            try:
-                from agents.tools.firestore_tools import firestore_save_session_turn
-                firestore_save_session_turn(
-                    session_id=session_id,
-                    turn_data={
-                        "query": query,
-                        "target_master": "AXIOM-ROUTER",
-                        "content": state.get("final_output_markdown", ""),
-                        "summary": state.get("final_output_markdown", "")[:200],
-                        "visual": state.get("visual_artifact"),
-                        "evidences": state.get("evidence_envelopes", [])
-                    },
-                    user_id=user_id
-                )
-            except Exception as e:
-                logger.debug(f"Could not save router turn: {e}")
-            return state
         if state.get("clarification", {}).get("clarification_needed", False):
             logger.info("Router: Clarification needed. Ending gracefully.")
             return state
@@ -194,24 +184,6 @@ class AxiomCognitiveRunner:
         # Both PM.ai and ENG.ai use the same nodes, parameterized by target_master
         # ============================================================================
         state = self._run_unified_master_loop(state)
-
-        # Save session turn to memory
-        try:
-            from agents.tools.firestore_tools import firestore_save_session_turn
-            firestore_save_session_turn(
-                session_id=session_id,
-                turn_data={
-                    "query": query,
-                    "target_master": master,
-                    "content": state.get("final_output_markdown", ""),
-                    "summary": state.get("final_output_markdown", "")[:200],
-                    "visual": state.get("visual_artifact"),
-                    "evidences": state.get("evidence_envelopes", [])
-                },
-                user_id=user_id
-            )
-        except Exception as e:
-            logger.debug(f"Could not save master turn: {e}")
 
         logger.info(f"AxiomCognitiveRunner: Execution complete. Response mode: {state.get('response_mode', 'text_only')}")
         return state
@@ -243,10 +215,10 @@ class AxiomCognitiveRunner:
             state["current_step"] = "REASON"
             logger.info(f"{master}: REASON complete. Required evidence: {state.get('required_evidence_dimensions', [])}")
 
-            # NODE 2: MEMORY RETRIEVAL (checks Firestore cache)
-            state = memory_retrieval_node(state)
-            if state.get("memory_hit"):
-                logger.info(f"{master}: MEMORY cache hit. Skipping agent call.")
+            # NODE 2: EVIDENCE CHECK (checks Firestore cache)
+            state = evidence_check_node(state)
+            if state.get("evidence_cache_hit") or state.get("memory_hit"):
+                logger.info(f"{master}: EVIDENCE cache hit. Skipping agent call.")
                 state = evaluate_node(state)
             else:
                 # NODE 3: PLAN (intelligent LLM-driven agent selection)

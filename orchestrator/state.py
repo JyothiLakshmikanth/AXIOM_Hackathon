@@ -59,6 +59,7 @@ class AxiomState(TypedDict, total=False):
     target_master: Optional[str]  # "AXIOM-PM" or "AXIOM-ENG"
     target_capability: Optional[str]
     confidence_score: float
+    confidence_level: Optional[str]  # "High" | "Medium" | "Low"
     system_prompt_router: str  # ← loaded from router JSON/prompt at router_node init
 
     # Cognitive Master State
@@ -71,6 +72,8 @@ class AxiomState(TypedDict, total=False):
 
     # Agent Delegation & Evidence
     delegated_agent: Optional[str]
+    executed_agents: List[str]
+    agent_executions: List[Dict[str, Any]]
     agent_task_input: Dict[str, Any]
     evidence_envelopes: List[Dict[str, Any]]
     evaluation_passed: bool

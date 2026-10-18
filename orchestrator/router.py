@@ -13,7 +13,7 @@ import logging
 from typing import Dict, Any
 from orchestrator.state import AxiomState
 from orchestrator.prompt_loader import load_prompt
-from orchestrator.gcp_client import get_gcp_client
+from orchestrator.gemini_client import generate_gemini_content
 
 logger = logging.getLogger("axiom.orchestrator.router")
 
@@ -59,11 +59,12 @@ Based on the above classification framework, analyze this user query and return 
 """
 
         # Call Gemini LLM for semantic classification
-        gcp = get_gcp_client()
-        llm_response = gcp.call_gemini(
-            system_prompt="You are an expert intent router for intelligent systems. Classify user queries semantically (not by keyword matching) into project delivery (PJM) or engineering (ENG) domains.",
-            user_input=llm_input,
-            temperature=0.3  # Low temperature for consistent routing decisions
+        logger.info(f"[LLM] Router: Analyzing intent for query: {query[:60]}...")
+        llm_response = generate_gemini_content(
+            prompt=llm_input,
+            system_prompt="You are an expert intent router for intelligent systems. Classify user queries semantically into project delivery (PJM) or engineering (ENG) domains.",
+            json_mode=True,
+            timeout=25
         )
 
         # Parse LLM response
@@ -95,14 +96,22 @@ Based on the above classification framework, analyze this user query and return 
         # Map domain to target_master
         domain_to_master = {
             "PJM": "AXIOM-PM",
+            "PM": "AXIOM-PM",
+            "PROJECT_MANAGEMENT": "AXIOM-PM",
             "ENG": "AXIOM-ENG",
+            "ENGINEERING": "AXIOM-ENG",
             "BOTH": "AXIOM-PM"  # Start with PM if both needed
         }
 
-        target_master = domain_to_master.get(classification.get("domain"), None)
+        domain_raw = str(classification.get("domain", "")).strip().upper()
+        target_master = domain_to_master.get(domain_raw)
+        if not target_master and classification.get("domain") != "NEEDS_CLARIFICATION":
+            target_master = "AXIOM-ENG" if "ENG" in domain_raw else "AXIOM-PM"
         target_capability = classification.get("target_capability")
+        raw_conf = str(classification.get("confidence", "Low")).strip().capitalize()
+        confidence_level = raw_conf if raw_conf in ("High", "Medium", "Low") else "Medium"
         confidence_score = {"High": 0.95, "Medium": 0.70, "Low": 0.4}.get(
-            classification.get("confidence", "Low"), 0.4
+            confidence_level, 0.4
         )
 
         # Build response
@@ -112,6 +121,7 @@ Based on the above classification framework, analyze this user query and return 
             "target_master": target_master,
             "target_capability": target_capability,
             "confidence_score": confidence_score,
+            "confidence_level": confidence_level,
             "boundary_classification": classification.get("boundary_classification"),
             "reasoning_summary": classification.get("reasoning"),
             "clarification_questions": classification.get("clarification_questions", [])
@@ -131,8 +141,20 @@ def _fallback_intent_classification(query: str) -> Dict[str, Any]:
     """Deterministic fallback classification when GCP Vertex LLM is offline or not configured."""
     q = query.lower()
 
-    is_eng = any(w in q for w in ["rca", "code", "patch", "ast", "diff", "regression", "proximity_controller", "controller.py", "unit test", "pytest"])
+    is_eng = any(w in q for w in ["rca", "code", "patch", "ast", "diff", "regression", "proximity_controller", "controller.py", "unit test", "pytest", "fix", "code fix", "pr", "pull request", "remediate"])
     is_pm = any(w in q for w in ["sprint", "velocity", "capacity", "rebalance", "allocat", "schedule", "milestone", "pi plan", "burn", "bottleneck", "blast radius", "triage"])
+
+    # High-priority: Combined Defect Analysis + Code Fix queries
+    if any(w in q for w in ["fix", "code fix", "patch", "remediate", "pull request", "pr"]) and any(w in q for w in ["defect", "issue", "ticket", "twk", "gh-", "triage", "analysis"]):
+        return {
+            "clarification_needed": False,
+            "domain": "ENG",
+            "target_master": "AXIOM-ENG",
+            "target_capability": "defect_triage_and_remediation",
+            "confidence_score": 0.95,
+            "boundary_classification": "cross_domain_fix",
+            "reasoning": "Query requests defect triage analysis and surgical code fix."
+        }
 
     if is_eng and not is_pm:
         return {
@@ -170,149 +192,14 @@ def _fallback_intent_classification(query: str) -> Dict[str, Any]:
     }
 
 
-def is_conversational_greeting_or_help(query: str) -> bool:
-    """Detects whether user query is a greeting, introduction, or platform help query."""
-    import re
-    cleaned = query.strip().lower()
-    cleaned_no_punct = re.sub(r'[^\w\s]', '', cleaned).strip()
-
-    greeting_words = {
-        "hi", "hello", "hey", "greetings", "good morning", "good afternoon",
-        "good evening", "howdy", "hola", "yo", "sup", "welcome"
-    }
-
-    help_phrases = {
-        "help", "who are you", "what are you", "what can you do", "capabilities",
-        "how does this work", "how to use", "what is axiom", "tell me about axiom",
-        "menu", "options", "commands"
-    }
-
-    return (
-        cleaned_no_punct in greeting_words or
-        any(cleaned_no_punct.startswith(g + " ") for g in greeting_words) or
-        cleaned_no_punct in help_phrases or
-        any(phrase in cleaned_no_punct for phrase in ["who are you", "what can you do", "what is axiom", "help me"])
-    )
-
-
-def generate_intelligent_router_greeting(query: str, state: AxiomState) -> str:
-    """
-    Intelligently generates a personalized, context-aware greeting using Vertex AI Gemini.
-    Incorporates:
-    - User/Session memory (previous turns and topics discussed in this session)
-    - Live BigQuery project context (SPR-03 in-flight items, TWK-107, overloaded engineers)
-    - Adaptive guidance towards PM.ai or ENG.ai capabilities
-    """
-    session_id = state.get("session_id", "default_session")
-    user_id = state.get("user_id", "Project_Lead")
-
-    # 1. Fetch user session memory
-    session_history = ""
-    try:
-        from agents.tools.firestore_tools import firestore_get_session_turns
-        turns = firestore_get_session_turns(session_id, limit=4)
-        if turns:
-            queries = [t.get("query", "") for t in turns if t.get("query")]
-            if queries:
-                session_history = "User's recent queries in this session: " + " | ".join(f'"{q}"' for q in queries[-3:])
-    except Exception as e:
-        logger.debug(f"Session memory lookup skipped: {e}")
-
-    # 2. Fetch live project facts
-    project_facts = ""
-    try:
-        from agents.tools.bigquery_tools import bigquery_get_team_capacity
-        cap = bigquery_get_team_capacity() or []
-        over = [c.get("Associate") for c in cap if float(c.get("Allocation_%") or 0) > 85]
-        over_str = ", ".join(sorted(list(set(over)))) if over else "Pavi2604, JyothiLakshmikanth"
-        project_facts = (
-            f"- Project: AXIOM E-Key 2W\n"
-            f"- Active Sprint: SPR-03 (6 in-flight items, active safety milestone)\n"
-            f"- Top Critical Bugs: TWK-107 (Boundary-Zone Unlock ASIL-B Safety Issue), TWK-108 (Unlock latency SLA breach)\n"
-            f"- Capacity Bottlenecks (>85% Safe Ceiling): {over_str}\n"
-        )
-    except Exception as e:
-        logger.debug(f"Project facts lookup skipped: {e}")
-        project_facts = "- Active Sprint: SPR-03 | Critical Defect: TWK-107 | Overallocated: Pavi2604, JyothiLakshmikanth"
-
-    # 3. Call Vertex AI Gemini to generate an intelligent, personalized greeting
-    try:
-        gcp = get_gcp_client()
-        system_prompt = (
-            "You are the intelligent conversational AXIOM Cognitive Router for the AXIOM E-Key 2W project.\n"
-            "You have full contextual awareness of the user's ongoing session history and live project metrics.\n"
-            "Acknowledge the user naturally and conversationally. If they have asked previous questions in this session, acknowledge that context naturally.\n"
-            "Highlight where the project currently stands (Sprint 3 active, critical defect TWK-107, engineer capacity overload).\n"
-            "Present clear, tailored suggestions for what they can do next:\n"
-            "- AXIOM-PM (PM.ai): Defect triage, ASIL-B blast radius, Sprint 3 capacity rebalancing.\n"
-            "- AXIOM-ENG (ENG.ai): Deep code RCA on proximity_controller.py, surgical patching, test synthesis.\n"
-            "Tone: Executive, intelligent, sharp, and helpful. Use clean GitHub markdown with emojis and bullet points."
-        )
-
-        user_input = f"""User greeting/message: "{query}"
-
-CONTEXT:
-User ID: {user_id}
-{session_history if session_history else "New conversation session."}
-LIVE PROJECT DATA:
-{project_facts}
-"""
-        response = gcp.call_gemini(
-            system_prompt=system_prompt,
-            user_input=user_input,
-            temperature=0.7
-        )
-        if response and len(response.strip()) > 20:
-            return response.strip()
-    except Exception as e:
-        logger.warning(f"Intelligent greeting generation fallback due to: {e}")
-
-    # Fallback dynamic response incorporating live project facts and session memory
-    context_note = ""
-    if session_history:
-        context_note = f"\n> 🧠 *Continuing from our earlier discussion in this session...*\n"
-
-    return (
-        f"### 👋 Hello! Welcome to AXIOM Intelligence Platform\n\n"
-        f"I am the **AXIOM Cognitive Router**, your unified interface coordinating **PM.ai** and **ENG.ai** "
-        f"for the **AXIOM E-Key 2W** project.\n\n"
-        f"{context_note}"
-        f"#### 📊 Current Project Pulse (Sprint 3 Active):\n"
-        f"- **Critical Defect Radar**: `TWK-107` (Boundary-Zone Unlock ASIL-B Safety Violation) & `TWK-108` (Unlock Latency SLA Breach).\n"
-        f"- **Resource Overload**: Engineers exceeding the 85% safe ceiling: **Pavi2604** & **JyothiLakshmikanth**.\n\n"
-        f"#### 🎯 Where would you like to direct the masters?\n\n"
-        f"| Master | Best For | Suggested Query |\n"
-        f"| :--- | :--- | :--- |\n"
-        f"| **🛡️ AXIOM-PM (PM.ai)** | Delivery governance, triage, capacity | *\"Analyze team capacity bottlenecks and recommend rebalancing plan for SPR-03\"* |\n"
-        f"| **⚡ AXIOM-ENG (ENG.ai)** | Technical code RCA, AST analysis, patching | *\"Perform deep code RCA and generate surgical patch for proximity_controller.py\"* |\n\n"
-        f"*(You can also click any of the prompt chips above or switch to Tab 1 for the Executive Risk Cockpit!)*"
-    )
-
-
 def router_node(state: AxiomState) -> AxiomState:
     """
     LangGraph Node: Top-level intent router.
-    Directly answers conversational greetings/help queries.
     Uses LLM-driven semantic classification to route to PM.ai or ENG.ai.
     Falls back to clarification if intent is ambiguous.
     """
     query = state.get("query", "")
     logger.info(f"ROUTER: Classifying query: {query[:100]}...")
-
-    # Direct Intelligent Greeting / Help check: bypass multi-agent loops and respond immediately
-    if is_conversational_greeting_or_help(query):
-        logger.info("ROUTER: Detected greeting/help query. Generating intelligent context-aware greeting.")
-        intelligent_greeting = generate_intelligent_router_greeting(query, state)
-        state["is_direct_response"] = True
-        state["human_validation_required"] = False
-        state["clarification"] = {"clarification_needed": False}
-        state["intent_clarified"] = True
-        state["target_master"] = "AXIOM-ROUTER"
-        state["confidence_score"] = 1.0
-        state["boundary_classification"] = "conversational_greeting"
-        state["final_output_markdown"] = intelligent_greeting
-        state["current_step"] = "ROUTER_DIRECT"
-        return state
 
     # LLM-driven semantic classification (not keyword matching)
     router_prompt = load_prompt("axiom_router", "router_node")
@@ -324,6 +211,7 @@ def router_node(state: AxiomState) -> AxiomState:
     state["target_master"] = decision.get("target_master")
     state["target_capability"] = decision.get("target_capability")
     state["confidence_score"] = decision.get("confidence_score", 0.0)
+    state["confidence_level"] = decision.get("confidence_level", "Medium")
     state["boundary_classification"] = decision.get("boundary_classification")
 
     logger.info(
@@ -349,3 +237,8 @@ def router_node(state: AxiomState) -> AxiomState:
         logger.info(f"ROUTER: Routed to {state['target_master']} with capability '{state['target_capability']}'")
 
     return state
+
+
+# Backward compatibility alias
+analyze_intent = analyze_intent_with_llm
+

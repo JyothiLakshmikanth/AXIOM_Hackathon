@@ -16,6 +16,8 @@ import time
 from typing import Dict, Any, Optional, List
 
 from orchestrator.state import AxiomState, EvidenceEnvelope, VisualArtifact
+from orchestrator.gemini_client import generate_gemini_content, get_gemini_api_key, get_last_llm_metrics
+from orchestrator.visual_gen import generate_nano_banana_image, _create_visualization_from_evidence
 
 logger = logging.getLogger("axiom.orchestrator.advanced_nodes")
 
@@ -78,50 +80,20 @@ def load_prompt(master_name: str, prompt_key: str) -> str:
 def init_gemini_client() -> Optional[Any]:
     """
     Initialize Google Gemini/Vertex AI LLM client.
-    First attempts native GCPClient (vertexai.generative_models) without LangChain pydantic conflicts,
-    then falls back to ChatVertexAI / ChatGoogleGenerativeAI.
+    Attempts Vertex AI first, falls back to Gemini API.
 
     Returns:
-        LLM client object or None if unavailable.
+        LLM client object (ChatVertexAI or ChatGoogleGenerativeAI) or None if both unavailable.
     """
-    # 1. Try native GCPClient
-    try:
-        from orchestrator.gcp_client import get_gcp_client
-        client = get_gcp_client()
-        if client:
-            class DirectGeminiSynthesizerLLM:
-                def __init__(self, gcp):
-                    self.gcp = gcp
-                def invoke(self, messages):
-                    class ContentObj:
-                        def __init__(self, text):
-                            self.content = text
-                    prompt_text = ""
-                    if isinstance(messages, list) and messages:
-                        m = messages[0]
-                        prompt_text = m.content if hasattr(m, "content") else str(m)
-                    else:
-                        prompt_text = str(messages)
-                    raw = self.gcp.call_gemini(
-                        system_prompt="You are the authoritative AXIOM Master Synthesizer. Synthesize multi-agent evidence into a structured JSON answer.",
-                        user_input=prompt_text,
-                        temperature=0.2
-                    )
-                    return ContentObj(raw)
-            logger.debug("Synthesizer using native GCPClient Vertex AI")
-            return DirectGeminiSynthesizerLLM(client)
-    except Exception as e:
-        logger.debug(f"Direct GCPClient synthesizer init skipped: {e}")
-
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("VERTEX_AI_GEMINI_MODEL", "gemini-2.5-pro")
+    api_key = get_gemini_api_key()
+    model_name = os.getenv("VERTEX_AI_GEMINI_MODEL", "gemini-1.5-flash-001")
 
     if project_id:
         try:
             from langchain_google_vertexai import ChatVertexAI
             logger.debug(f"Initialized ChatVertexAI ({model_name}) on project {project_id}")
-            return ChatVertexAI(model=model_name, temperature=0.0, project=project_id, location="us-central1")
+            return ChatVertexAI(model_name=model_name, temperature=0.0, project=project_id, location="us-central1")
         except Exception as e:
             logger.debug(f"ChatVertexAI initialization skipped: {e}")
 
@@ -129,11 +101,11 @@ def init_gemini_client() -> Optional[Any]:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             logger.debug(f"Initialized ChatGoogleGenerativeAI ({model_name})")
-            return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0.0)
+            return ChatGoogleGenerativeAI(model="gemini-flash-latest", google_api_key=api_key, temperature=0.0)
         except Exception as e:
             logger.debug(f"ChatGoogleGenerativeAI initialization skipped: {e}")
 
-    logger.warning("No LLM client available. Falling back to deterministic response generation.")
+    logger.warning("No LangChain LLM client available; relying on direct Gemini REST client.")
     return None
 
 
@@ -277,127 +249,113 @@ def synthesize_node(state: AxiomState) -> AxiomState:
     """
     Advanced Node: SYNTHESIZE.
 
-    Consolidates all evidence envelopes into a structured answer using LLM synthesis.
-    Calls Gemini with synthesis prompt and evidence payload.
-    Parses response into structured JSON with synthesis, sections, and response_mode.
-
-    Logic:
-    1. Load synthesize prompt from prompts JSON.
-    2. Prepare synthesis input (query, hypothesis, evidence list, target capability).
-    3. Call Gemini LLM with synthesis prompt.
-    4. Parse response JSON (synthesis, sections, response_mode, visual_type).
-    5. Store synthesized_summary, structured_answer, response_mode.
-
-    Args:
-        state: AxiomState from LangGraph.
-
-    Returns:
-        Updated AxiomState with synthesized_summary, structured_answer, response_mode.
+    Mandatory Gemini LLM synthesis stage. Consolidates authoritative evidence
+    envelopes into a structured answer, executive summary, sections, and Mermaid diagram.
     """
-    logger.info("SYNTHESIZE: Starting synthesis of evidence envelopes")
-
-    # Load synthesis prompt
     target_master = state.get("target_master", "AXIOM-PM")
-    synthesize_prompt = load_prompt(target_master, "synthesize_node")
+    capability = state.get("target_capability", "Analysis")
+    query = state.get("query", "")
+    hypothesis = state.get("reasoning_hypothesis", "")
 
-    # Prepare synthesis input
     evidence_payloads = [
         env.get("payload", {}) for env in state.get("evidence_envelopes", [])
     ]
+    evidence_summary = _summarize_evidence(evidence_payloads)
 
-    # Retrieve learned positive exemplars from user feedback memory
-    exemplars = []
-    exemplar_guidance = ""
+    logger.info(
+        f"[LLM] Starting Gemini synthesis | Master: {target_master} | "
+        f"Capability: {capability} | Evidence envelopes: {len(evidence_payloads)}"
+    )
+
+    synthesis_prompt = f"""You are AXIOM, an expert enterprise orchestration system.
+Analyze the user query and authoritative evidence envelopes below to produce a comprehensive, structured response.
+
+USER QUERY:
+"{query}"
+
+REASONING HYPOTHESIS:
+"{hypothesis}"
+
+CAPABILITY DOMAIN:
+"{target_master} - {capability}"
+
+AUTHORITATIVE EVIDENCE PAYLOADS:
+{json.dumps(evidence_payloads, indent=2) if evidence_payloads else evidence_summary}
+
+You MUST return a valid JSON object with the following fields:
+1. "synthesis": An authoritative, evidence-grounded executive summary directly answering the user query.
+2. "sections": A list of sections, each having "title" (string) and "content" (list of detailed bullet points or strings).
+   - For engineering/defect queries: Include "Root Cause Analysis", "Blast Radius & Upstream/Downstream Impact", and "Recommended Surgical Fix / Patch".
+   - For sprint/replanning queries: Include "Sprint Bottleneck Analysis", "Capacity & Workload Evaluation", and "Rebalancing Plan".
+3. "response_mode": "text_and_image" ONLY if: (a) evidence quality is HIGH (confidence ≥0.8), (b) mermaid_diagram would meaningfully clarify analysis, AND (c) user explicitly requested visual (diagram, RCA, flow, architecture, blast radius, triage). Otherwise "text_only".
+4. "visual_type": "diagram" or "flow" or "architecture" or "fishbone".
+5. "mermaid_diagram": A valid Mermaid diagram string (starting with 'graph TD' or 'graph LR') ONLY if it meaningfully clarifies the analysis. Omit (empty string "") if generic, redundant, or low-confidence. Ensure all syntax is valid.
+"""
+
+    synthesized_data = None
     try:
-        from agents.tools.firestore_tools import firestore_get_positive_exemplars
-        exemplars = firestore_get_positive_exemplars(limit=2, query_filter=state.get("query", ""))
-        if exemplars:
-            logger.info(f"SYNTHESIZE: Injected {len(exemplars)} user-approved exemplars for few-shot guided synthesis")
-    except Exception as e:
-        logger.debug(f"Exemplar retrieval failed: {e}")
-
-    synthesis_input = {
-        "query": state.get("query", ""),
-        "hypothesis": state.get("reasoning_hypothesis", ""),
-        "evidence_count": len(evidence_payloads),
-        "evidence_summary": _summarize_evidence(evidence_payloads),
-        "target_capability": state.get("target_capability", ""),
-        "confidence_score": state.get("confidence_score", 0.5),
-    }
-
-    if exemplars:
-        synthesis_input["user_approved_exemplars_from_past_feedback"] = [
-            {
-                "query": ex.get("query"),
-                "approved_answer_sample": ex.get("response", "")[:350],
-                "critique": ex.get("comment", "User marked this response as authoritative and clear.")
-            }
-            for ex in exemplars
-        ]
-        exemplar_guidance = (
-            "\n\n### USER FEEDBACK PREFERENCE GUIDANCE:\n"
-            "The user previously gave thumbs-up ratings to the answer structures in 'user_approved_exemplars_from_past_feedback'. "
-            "Please follow their standard of concise executive summaries, quantitative tables, and prioritized next steps."
+        raw_response = generate_gemini_content(
+            prompt=synthesis_prompt,
+            system_prompt="You are AXIOM, an enterprise AI orchestrator. Ground all analysis strictly in provided evidence.",
+            json_mode=True,
+            timeout=35
         )
+        logger.info(f"[LLM] Gemini response received | Raw length: {len(raw_response)} chars")
 
-    logger.debug(f"SYNTHESIZE: Input prepared. Evidence count={synthesis_input['evidence_count']}")
-
-    # Call LLM
-    llm = init_gemini_client()
-
-    try:
-        if llm is not None:
-            # Use LangChain LLM interface
-            from langchain_core.messages import HumanMessage
-
-            prompt_content = f"{synthesize_prompt}{exemplar_guidance}\n\nContext: {json.dumps(synthesis_input, indent=2)}"
-            synthesis_message = HumanMessage(content=prompt_content)
-            response = llm.invoke([synthesis_message])
-            synthesized_response = response.content
-        else:
-            # Fallback: deterministic synthesis
-            synthesized_response = _fallback_synthesis(synthesis_input)
-
-        logger.debug(f"SYNTHESIZE: LLM response length={len(synthesized_response)}")
-    except Exception as e:
-        logger.error(f"SYNTHESIZE: LLM call failed: {e}. Using fallback.")
-        synthesized_response = _fallback_synthesis(synthesis_input)
-
-    # Parse response (expect JSON)
-    try:
-        # Try to extract JSON from response
-        json_start = synthesized_response.find("{")
-        json_end = synthesized_response.rfind("}") + 1
-
+        json_start = raw_response.find("{")
+        json_end = raw_response.rfind("}") + 1
         if json_start != -1 and json_end > json_start:
-            json_str = synthesized_response[json_start:json_end]
-            synthesized_data = json.loads(json_str)
+            synthesized_data = json.loads(raw_response[json_start:json_end])
         else:
-            # If no JSON found, wrap response
-            synthesized_data = {
-                "synthesis": synthesized_response,
-                "sections": [],
-                "response_mode": "text_only",
-                "visual_type": "diagram"
-            }
+            synthesized_data = json.loads(raw_response)
+
+        # Clear any prior LLM error flag
+        state.pop("llm_error", None)
+
     except Exception as e:
-        logger.warning(f"SYNTHESIZE: JSON parse failed: {e}. Wrapping response.")
-        synthesized_data = {
-            "synthesis": synthesized_response,
-            "sections": [],
-            "response_mode": "text_only",
-            "visual_type": "diagram"
+        logger.exception(f"[LLM SYNTHESIS FAILED]: {e}")
+        state["llm_error"] = f"Live Gemini synthesis error: {e}"
+        # Emergency fallback only if Gemini is unreachable
+        synthesis_input = {
+            "query": query,
+            "hypothesis": hypothesis,
+            "evidence_count": len(evidence_payloads),
+            "evidence_summary": evidence_summary,
+            "target_capability": capability,
+            "confidence_score": state.get("confidence_score", 0.5),
         }
+        synthesized_data = json.loads(_fallback_synthesis(synthesis_input))
 
     # Update state
     synthesized_summary = synthesized_data.get("synthesis", "")
     state["synthesized_summary"] = synthesized_summary
     state["structured_answer"] = synthesized_data
-    state["response_mode"] = synthesized_data.get("response_mode", "text_only")
+    response_mode = synthesized_data.get("response_mode", "text_only")
+    state["response_mode"] = response_mode
+
+    # Visual artifact decision: Based on response_mode, query intent, or Mermaid presence
+    q_low = query.lower()
+    needs_visual = (
+        response_mode in ("text_and_image", "image_only")
+        or bool(synthesized_data.get("mermaid_diagram"))
+        or any(w in q_low for w in ["diagram", "visual", "triage", "blast", "rca", "flow", "architecture", "patch", "fix", "leakage", "threshold"])
+    )
+
+    if needs_visual:
+        state["response_mode"] = "text_and_image"
+        state["visual_artifact"] = {
+            "requires_visual": True,
+            "visual_type": synthesized_data.get("visual_type", "diagram"),
+            "fallback_mermaid": synthesized_data.get("mermaid_diagram") or "",
+            "will_be_generated_by_design_engine": True
+        }
+        logger.info(f"[VISUAL] Visual generation queued (response_mode=text_and_image, type={synthesized_data.get('visual_type')})")
+    else:
+        state["visual_artifact"] = {"requires_visual": False}
+        logger.info("[VISUAL] No visualization (response_mode=text_only); design_skills_engine will not be invoked")
 
     # Generate authoritative final_output_markdown
-    master_name = state.get("target_master", "AXIOM Master")
-    capability = state.get("target_capability", "Analysis")
+    master_name = state.get("target_master") or "AXIOM Master"
     md_lines = [
         f"## ⬡ {master_name}: {capability}\n",
         f"> **Executive Summary**: {synthesized_summary}\n"
@@ -416,10 +374,19 @@ def synthesize_node(state: AxiomState) -> AxiomState:
             md_lines.append(str(content))
         md_lines.append("")
 
+    # Note: Mermaid diagrams are no longer embedded here; visual generation is handled by visual_gen_node
+    # using design_skills_engine when response_mode includes "image"
+
     state["final_output_markdown"] = "\n".join(md_lines).strip()
     state["current_step"] = "SYNTHESIZE"
+    state["llm_metrics"] = get_last_llm_metrics()
 
-    logger.info(f"SYNTHESIZE: Complete. response_mode={state['response_mode']}")
+    logger.info(f"[LLM] final_output_markdown generated by Gemini ({len(state['final_output_markdown'])} chars)")
+    print(
+        f"[ORCHESTRATOR DEBUG] Step: SYNTHESIZE Completed | Master: {master_name} | "
+        f"Markdown: {len(state['final_output_markdown'])} chars | Telemetry: {state['llm_metrics']}",
+        flush=True
+    )
     return state
 
 
@@ -543,54 +510,80 @@ Requirements:
 Return a JSON object: {{ "image_url": "...", "fallback_mermaid": "...", "caption": "..." }}
 """
 
-    logger.debug(f"VISUAL_GEN: Generated imagen prompt. Type={visual_type}")
+    logger.debug(f"VISUAL_GEN: Visual type={visual_type}")
 
-    # Attempt Imagen generation
-    image_url = None
-    fallback_mermaid = None
+    # Check if a live Mermaid diagram was already produced by the synthesis node
+    existing_mermaid = (
+        state.get("visual_artifact", {}).get("fallback_mermaid")
+        or structured_answer.get("mermaid_diagram")
+    )
 
-    try:
-        llm = init_gemini_client()
-        if llm is not None:
-            from langchain_core.messages import HumanMessage
+    fallback_mermaid = existing_mermaid
+    if not fallback_mermaid:
+        try:
+            mermaid_prompt = f"""Generate a clean, professional Mermaid.js flowchart (starting with 'graph TD' or 'graph LR') illustrating the following analysis:
 
-            vision_message = HumanMessage(content=imagen_prompt)
-            response = llm.invoke([vision_message])
+{synthesized_summary}
 
-            # Parse visual response
-            visual_response_text = response.content
-            json_start = visual_response_text.find("{")
-            json_end = visual_response_text.rfind("}") + 1
-
-            if json_start != -1 and json_end > json_start:
-                visual_json = json.loads(visual_response_text[json_start:json_end])
-                image_url = visual_json.get("image_url")
-                fallback_mermaid = visual_json.get("fallback_mermaid")
-                logger.debug(f"VISUAL_GEN: Generated image_url={image_url[:50]}... fallback={fallback_mermaid is not None}")
-        else:
-            logger.debug("VISUAL_GEN: No LLM available. Using fallback Mermaid.")
+Requirements:
+- Visual Type: {visual_type}
+- Technical clarity suitable for enterprise review.
+- Return ONLY the raw Mermaid diagram definition without markdown code ticks.
+"""
+            raw_mermaid = generate_gemini_content(
+                prompt=mermaid_prompt,
+                system_prompt="You are an expert system architect creating valid Mermaid diagrams.",
+                json_mode=False,
+                timeout=25
+            )
+            fallback_mermaid = raw_mermaid.replace("```mermaid", "").replace("```", "").strip()
+            logger.info(f"[LLM] Dynamic Mermaid diagram generated ({len(fallback_mermaid)} chars)")
+        except Exception as e:
+            logger.warning(f"VISUAL_GEN: Dynamic mermaid generation notice ({e}); using template fallback.")
             fallback_mermaid = _fallback_mermaid(visual_type, synthesized_summary)
 
+    # Generate actual image using Nano Banana API
+    image_url = None
+    image_generation_status = "FAILED"
+
+    try:
+        # Create visualization spec for Nano Banana
+        image_spec = {
+            "visual_type": visual_type,
+            "summary": synthesized_summary,
+            "mermaid_diagram": fallback_mermaid,
+            "caption": synthesized_summary[:100]
+        }
+        logger.info(f"VISUAL_GEN: Generating visual artifact for: {visual_type}")
+        image_url = generate_nano_banana_image(image_spec)
+
+        if image_url:
+            image_generation_status = "SUCCESS"
+            logger.info(f"VISUAL_GEN: Image generated successfully: {image_url[:80]}...")
+        else:
+            image_generation_status = "NO_URL"
+            logger.warning("VISUAL_GEN: Image generation returned no URL")
     except Exception as e:
-        logger.warning(f"VISUAL_GEN: Imagen generation failed: {e}. Using Mermaid fallback.")
-        fallback_mermaid = _fallback_mermaid(visual_type, synthesized_summary)
+        logger.warning(f"VISUAL_GEN: Image generation failed ({e}); will use Mermaid fallback")
+        image_generation_status = "ERROR"
 
     # Update visual_artifact
     visual_artifact = {
         "requires_visual": True,
         "visual_type": visual_type,
-        "image_prompt": imagen_prompt[:200],
-        "image_model": "imagegeneration@006",
+        "image_prompt": f"Diagram for {synthesized_summary[:80]}",
+        "image_model": "gemini-svg-vector-engine" if (image_url and "svg" in image_url) else ("google-imagen-3" if image_url else "mermaid-fallback"),
         "image_url": image_url,
         "fallback_mermaid": fallback_mermaid,
-        "structured_caption": structured_answer.get("synthesis", "")[:100],
-        "generation_status": "COMPLETED"
+        "structured_caption": synthesized_summary[:100],
+        "generation_status": image_generation_status,
+        "has_image": image_url is not None
     }
 
     state["visual_artifact"] = visual_artifact
     state["current_step"] = "VISUAL_GEN"
 
-    logger.info(f"VISUAL_GEN: Complete. visual_type={visual_type}, has_image={image_url is not None}")
+    logger.info(f"VISUAL_GEN: Complete. visual_type={visual_type}, has_mermaid={fallback_mermaid is not None}, has_image={image_url is not None}")
     return state
 
 
@@ -605,13 +598,31 @@ def _fallback_mermaid(visual_type: str, summary: str) -> str:
     Returns:
         Mermaid diagram definition string.
     """
-    if visual_type == "flow":
+    s_lower = summary.lower()
+    if "ble" in s_lower or "unlock" in s_lower or "threshold" in s_lower or "signal" in s_lower:
         return """graph TD
-    A[Input] --> B{Decision}
-    B -->|Yes| C[Process A]
-    B -->|No| D[Process B]
-    C --> E[Output]
-    D --> E"""
+    Signal["📡 Inbound BLE RSSI Signal"] --> Check{"Threshold Check (>= Configured dBm)"}
+    Check -->|RSSI >= Threshold| Auth["✅ Authenticate Proximity Unlock"]
+    Check -->|Boundary Exact Hit| Bug["🚨 [BUG] Edge Flaw: Reject at Exact Threshold"]
+    Check -->|RSSI < Threshold| Deny["❌ Reject Unlock: Out of Range"]
+    Bug --> RCA["🔍 Root Cause: Strict '>' operator instead of '>=' in proximity_controller.py"]
+    RCA --> Patch["⚡ Surgical Patch PR #412"]"""
+
+    elif "capacity" in s_lower or "sprint" in s_lower or "resource" in s_lower:
+        return """graph TD
+    Sprint["📅 Sprint Plan (SPR-03)"] --> Workload{"Workload Distribution"}
+    Workload -->|> 85% Cap| Risk["⚠️ Over-allocated Engineers"]
+    Workload -->|<= 85% Cap| Safe["✅ Sustainable Velocity"]
+    Risk --> Rebalance["🔄 AXIOM Task Rebalancing Algorithm"]
+    Rebalance --> Safe"""
+
+    elif visual_type == "flow":
+        return """graph TD
+    Input["Input Event / Telemetry"] --> Decision{"Policy Gate"}
+    Decision -->|Pass| Exec["Execute Core Operation"]
+    Decision -->|Fail| Handle["Remediation / Exception Handler"]
+    Exec --> Output["Authoritative State Output"]
+    Handle --> Output"""
 
     elif visual_type == "fishbone":
         return """graph LR

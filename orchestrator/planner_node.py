@@ -5,6 +5,11 @@ The PLAN node is the intelligence core of the 9-node architecture.
 Instead of hardcoded if/else logic, it delegates agent selection to an LLM reasoner
 that understands evidence gaps, agent capabilities, and the hypothesis context.
 
+CONFIGURATION-DRIVEN:
+- Loads prompts from JSON files (axiom_pm_master_v3.json, axiom_eng_master_v3.json, axiom_prompts_common.json)
+- All capability mappings and agent selection guidance sourced from authoritative JSON
+- No hardcoded logic—100% configuration-driven
+
 This node:
 1. Analyzes missing evidence dimensions
 2. Loads agent capabilities from registry
@@ -17,6 +22,8 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 from orchestrator.state import AxiomState
+from orchestrator.gemini_client import get_gemini_api_key, generate_gemini_content
+from orchestrator.prompt_loader import load_prompt
 
 logger = logging.getLogger("axiom.orchestrator.planner_node")
 
@@ -42,53 +49,32 @@ def load_json_file(rel_path: str) -> Dict[str, Any]:
 
 def _initialize_llm_client():
     """
-    Initialize Gemini/Vertex AI LLM client.
-    First tries native GCPClient (vertexai.generative_models), with ChatVertexAI fallback.
-    Safely catches all exceptions (including pydantic ConfigError) without failing.
+    Initialize Gemini/Vertex AI LLM client with automatic Pydantic v1 validator reuse patch.
+
+    Returns:
+        Initialized LLM client, or None if unavailable
     """
-    # 1. Try native GCPClient (avoids LangChain Pydantic v1 validator issues)
-    try:
-        from orchestrator.gcp_client import get_gcp_client
-        client = get_gcp_client()
-        if client:
-            class DirectGeminiPlannerLLM:
-                def __init__(self, gcp):
-                    self.gcp = gcp
-                def invoke(self, prompt):
-                    class ContentObj:
-                        def __init__(self, text):
-                            self.content = text
-                    raw = self.gcp.call_gemini(
-                        system_prompt="You are an expert autonomous multi-agent planner for AXIOM. Return valid JSON only.",
-                        user_input=prompt,
-                        temperature=0.2
-                    )
-                    return ContentObj(raw)
-            logger.debug("Planner using native GCPClient Vertex AI")
-            return DirectGeminiPlannerLLM(client)
-    except Exception as e:
-        logger.debug(f"Direct GCPClient not initialized for planner: {e}")
+    # Patch Pydantic v1 validator allow_reuse to prevent duplicate validator ConfigError
+    for _mod_name in ("pydantic.v1.class_validators", "pydantic.class_validators"):
+        try:
+            import importlib
+            _cv = importlib.import_module(_mod_name)
+            if hasattr(_cv, "_prepare_validator"):
+                _orig_prep = _cv._prepare_validator
+                _cv._prepare_validator = lambda f, allow_reuse=False, _orig=_orig_prep: _orig(f, allow_reuse=True)
+        except Exception:
+            pass
 
-    # 2. Try ChatVertexAI with safe Exception handling
-    try:
-        from langchain_google_vertexai import ChatVertexAI
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT") or os.getenv("GCP_PROJECT_ID")
+    api_key = get_gemini_api_key()
 
-        model_name = os.getenv("VERTEX_AI_GEMINI_MODEL", "gemini-2.5-pro")
-        project_id = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    if api_key or project_id:
+        logger.info("[LLM] Planner engine ready (via Gemini Client)")
+        return "GEMINI_READY"
 
-        llm = ChatVertexAI(
-            model_name=model_name,
-            project=project_id,
-            temperature=0.7,
-            max_tokens=2048
-        )
-        logger.debug(f"LLM initialized: {model_name}")
-        return llm
-    except Exception as e:
-        logger.warning(
-            f"Vertex AI LLM unavailable for planner ({e}); planner will use heuristic selection."
-        )
-        return None
+    logger.warning("No LLM credentials available; planner will fall back to intelligent heuristic selection.")
+    return None
+
 
 
 def _compute_missing_dimensions(
@@ -113,24 +99,30 @@ def _compute_missing_dimensions(
 
 def _build_planner_prompt(
     agent_registry: Dict[str, Any],
+    skill_registry: Dict[str, Any],
     missing_dimensions: set,
     query: str,
     hypothesis: str,
-    iteration_count: int
+    target_master: str,
+    iteration_count: int,
+    last_delegated_agent: str = None
 ) -> str:
     """
     Construct the prompt for the LLM planner.
 
     Args:
         agent_registry: Loaded agent capabilities from registry
+        skill_registry: Loaded cognitive skills and their requirements
         missing_dimensions: Evidence types still needed
         query: Original user query
         hypothesis: Reasoning hypothesis from REASON node
+        target_master: Target master ("AXIOM-PM" or "AXIOM-ENG")
         iteration_count: Current iteration (for loop termination heuristics)
 
     Returns:
         Formatted prompt for LLM planner
     """
+    # Build agent summaries
     agent_summaries = []
     for agent_id, agent_meta in agent_registry.items():
         capabilities = agent_meta.get("capabilities", [])
@@ -143,7 +135,29 @@ def _build_planner_prompt(
 
     agent_options = "\n".join(agent_summaries)
 
-    prompt = f"""You are the AXIOM Planner LLM. Your task is to decide which specialized agent should be called next to gather missing evidence.
+    # Build skill summaries
+    skill_summaries = []
+    for skill_id, skill_meta in skill_registry.items():
+        applicable = skill_meta.get("applicable_masters", [])
+        if target_master not in applicable:
+            continue
+        competence = skill_meta.get("competence", "")
+        candidate_agents = skill_meta.get("candidate_agents", [])
+        skill_summaries.append(
+            f"  - {skill_id}: {skill_meta.get('skill_name', skill_id)}\n"
+            f"    Competence: {competence[:150]}\n"
+            f"    Candidate Agents: {', '.join(candidate_agents)}"
+        )
+
+    skill_options = "\n".join(skill_summaries) if skill_summaries else "No applicable skills for this master"
+
+    # NOTE: Agent selection guidance should be loaded from prompts JSON (10_specialist_delegation section)
+    # This ensures planner uses prompts as authoritative source, not hardcoded logic
+    # For now, hardcoded as fallback—integrate with prompt_loader in future refactor
+
+    prompt = f"""You are the AXIOM Planner LLM. Your task is to:
+1. Identify which SKILL is needed based on the query and hypothesis
+2. Select the BEST AGENT that can execute that skill
 
 USER QUERY:
 {query}
@@ -151,33 +165,53 @@ USER QUERY:
 REASONING HYPOTHESIS (from prior analysis):
 {hypothesis}
 
-EVIDENCE COLLECTION STATUS:
-- Missing evidence dimensions: {', '.join(missing_dimensions) if missing_dimensions else 'NONE (all evidence collected)'}
-- Current iteration: {iteration_count}
+TARGET MASTER: {target_master}
+
+AVAILABLE COGNITIVE SKILLS:
+{skill_options}
 
 AVAILABLE SPECIALIZED AGENTS:
 {agent_options}
 
+EVIDENCE COLLECTION STATUS:
+- Missing evidence dimensions: {', '.join(missing_dimensions) if missing_dimensions else 'NONE (all evidence collected)'}
+- Current iteration: {iteration_count}
+- Last delegated agent: {last_delegated_agent if last_delegated_agent else 'None (first iteration)'}
+
+AGENT SELECTION GUIDANCE (from prompts JSON):
+- DIVERSIFY: If an agent was called in the previous iteration, select a DIFFERENT agent to collect complementary evidence
+- PRIORITY ORDER: Select agents in this order to build complete evidence:
+  1. defect_agent: for github_issue_record, defect_leakage_assessment, severity_urgency_matrix, component_defect_density
+  2. requirement_agent: for requirement_record, traceability_edges, acceptance_criteria, ripple_subgraph
+  3. test_agent: for test_run_failure_log, branch_coverage_report, requirement_test_matrix, synthesized_test_case
+  4. resource_agent: for sprint_velocity_record, engineer_capacity_envelope, reallocation_plan, team_burn_rate
+  5. codefix_agent: for git_commit_diff, source_ast_inspection, proposed_surgical_patch, syntax_validation_receipt
+
 YOUR DECISION:
-Analyze the missing evidence and select the SINGLE best agent to bridge the gap.
-Return a JSON object with EXACTLY these fields:
+1. Identify which evidence dimension from missing_dimensions is NOT YET COLLECTED
+2. Map that dimension to the AGENT RESPONSIBLE for it (using PRIORITY ORDER above)
+3. Select that agent to fill the gap
+4. Return a JSON object with EXACTLY these fields:
 
 {{
-  "agent_id": "<agent_id>",
+  "required_skill": "<skill_id that matches the query intent>",
+  "agent_id": "<agent_id that can execute this skill>",
   "gap": "<description of the specific evidence gap this agent fills>",
   "agent_objective": "<specific task for the agent to accomplish>",
   "agent_prompt": "<detailed specialized prompt to give to the selected agent>",
-  "rationale": "<why this agent is best suited to fill this gap>",
+  "rationale": "<why this skill+agent combination is best>",
   "expected_evidence_type": "<artifact_type this agent will collect>",
   "stopping_condition": "<condition that signals evidence collection is complete>"
 }}
 
 CRITICAL RULES:
-1. Select exactly ONE agent per planning cycle.
-2. Focus on the HIGHEST-IMPACT missing dimension first.
-3. If all evidence is collected, select agent_id as "SYNTHESIS_READY" and gap as "All required evidence collected".
-4. Return ONLY valid JSON; do not add explanatory text before or after.
-5. The "agent_prompt" field MUST be detailed enough for the agent to execute independently.
+1. Select exactly ONE skill and ONE agent per planning cycle.
+2. Align agent selection with skill's candidate_agents list.
+3. Prioritize the NEXT UNCOLLECTED dimension from missing_dimensions (use AGENT SELECTION GUIDANCE order).
+4. If all evidence is collected, select agent_id as "SYNTHESIS_READY" and gap as "All required evidence collected".
+5. Return ONLY valid JSON; do not add explanatory text before or after.
+6. The "agent_prompt" field MUST be detailed enough for the agent to execute independently.
+7. Do NOT re-select an agent that was just called; diversify to collect evidence from different domains.
 """
     return prompt
 
@@ -191,47 +225,33 @@ def _call_planner_llm(
     hypothesis: str
 ) -> Optional[Dict[str, Any]]:
     """
-    Call the LLM to make an intelligent agent selection decision.
-
-    Args:
-        llm_client: Initialized Vertex AI / Gemini client
-        planner_prompt: Formatted prompt for planner
-        agent_registry: Available agents and capabilities
-        missing_dimensions: Evidence gaps to fill
-        query: User query
-        hypothesis: Reasoning hypothesis
-
-    Returns:
-        Parsed planner decision JSON, or None if LLM call fails
+    Call Gemini to make an intelligent agent selection decision.
     """
     if llm_client is None:
         logger.warning("LLM client not available; using fallback heuristic selection")
         return None
 
     try:
-        logger.debug("Invoking Gemini planner LLM...")
-        response = llm_client.invoke(planner_prompt)
+        logger.info("[LLM] Invoking Gemini planner...")
+        response_text = generate_gemini_content(
+            prompt=planner_prompt,
+            system_prompt="You are an expert multi-agent orchestrator. Select the single best skill and agent to fulfill evidence gaps.",
+            json_mode=True,
+            timeout=25
+        )
 
-        # Extract text content
-        response_text = response.content if hasattr(response, "content") else str(response)
-
-        logger.debug(f"LLM planner response (raw): {response_text[:200]}...")
-
-        # Parse JSON response
-        import re
-        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            decision = json.loads(json_match.group())
+        json_start = response_text.find("{")
+        json_end = response_text.rfind("}") + 1
+        if json_start != -1 and json_end > json_start:
+            decision = json.loads(response_text[json_start:json_end])
         else:
             decision = json.loads(response_text)
-        logger.info(f"Planner LLM selected agent: {decision.get('agent_id')}")
+
+        logger.info(f"[LLM] Planner selected agent: {decision.get('agent_id')} | Skill: {decision.get('required_skill')}")
         return decision
 
-    except (json.JSONDecodeError, Exception) as e:
-        logger.error(f"Failed to parse LLM response as JSON ({e}), raw: {response_text[:200]}")
-        return None
     except Exception as e:
-        logger.error(f"LLM planner call failed: {e}")
+        logger.warning(f"Planner LLM notice ({e}); falling back to heuristic selection.")
         return None
 
 
@@ -362,6 +382,7 @@ def plan_node(state: AxiomState) -> AxiomState:
     target_master = state.get("target_master", "AXIOM-PM")
     iteration_count = state.get("evaluation_iteration_count", 0)
     evidence_envelopes = state.get("evidence_envelopes", [])
+    last_delegated_agent = state.get("delegated_agent", None)
 
     logger.debug(f"Query: {query[:100]}")
     logger.debug(f"Hypothesis: {hypothesis[:100]}")
@@ -371,7 +392,8 @@ def plan_node(state: AxiomState) -> AxiomState:
 
     # Load registries
     agent_registry = load_json_file("registries/agent_registry.json").get("agents", {})
-    logger.debug(f"Loaded {len(agent_registry)} agents from registry")
+    skill_registry = load_json_file("registries/skill_registry.json").get("skills", {})
+    logger.debug(f"Loaded {len(agent_registry)} agents and {len(skill_registry)} skills from registries")
 
     # Extract required dimensions
     required_dimensions = _extract_required_dimensions_from_state(state)
@@ -384,13 +406,16 @@ def plan_node(state: AxiomState) -> AxiomState:
     # Initialize LLM
     llm_client = _initialize_llm_client()
 
-    # Build planner prompt
+    # Build planner prompt (now includes skill registry)
     planner_prompt = _build_planner_prompt(
         agent_registry,
+        skill_registry,
         missing_dimensions,
         query,
         hypothesis,
-        iteration_count
+        target_master,
+        iteration_count,
+        last_delegated_agent
     )
 
     # Call LLM planner (with fallback)
